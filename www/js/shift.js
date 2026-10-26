@@ -93,7 +93,10 @@ const Shift = (() => {
       if(!silent){
         Utils.toast(`Synced ${mergedLogs.length} shift logs from cloud`, "success");
       }
-      if(activeTab === "logs"){
+      // (2026-07-13) Live refresh shift view on recovery; was logs-only check
+      if(typeof App !== "undefined" && App.paintTopbar) App.paintTopbar();
+      const curV = (typeof App !== "undefined" && App.getCurrentView) ? App.getCurrentView() : (App?.currentView || null);
+      if(curV === "shift" || activeTab === "logs"){
         render();
       }
       return DB.getShift ? DB.getShift() : null;
@@ -247,14 +250,21 @@ const Shift = (() => {
           // (2026-10-05) Read from modal directly; was document.getElementById causing 1000 revert
           const startInp = modal.querySelector("#shift-start-cash");
           const rawVal = startInp ? String(startInp.value).trim().replace(/[^0-9.]/g, '') : '0';
+          // (2026-07-13) Define nowTs and openingCash; was undeclared reference
           const openingCash = parseFloat(rawVal) || 0;
           const nowTs = Date.now();
+          // (2026-07-13) Tag shift with deviceId and deviceName; was untagged
+          const myDevId = DB.getDeviceId ? DB.getDeviceId() : (localStorage.getItem("mm_deviceId") || "dev");
+          const myDevTag = localStorage.getItem("mm_terminalTag") || "Terminal";
           const shiftRecord = {
             id: Utils.uid("shift"),
             openedAt: nowTs,
             updatedAt: nowTs,
             openingCash,
             cashier: currentUser,
+            cashierId: Auth.currentUser()?.id || null,
+            deviceId: myDevId,
+            deviceName: myDevTag,
             status: "open",
             cashIn: 0,
             cashOut: 0
@@ -425,10 +435,22 @@ const Shift = (() => {
     setTimeout(() => window.print(), 150);
   }
 
-  // (2026-07-13) Close shift modal with cash counting & variance calculation; was manual
-  function openEndShiftModal(){
+  // (2026-07-13) Permit shift close if shift cashier or JP account; was all admins
+  function openEndShiftModal(isForce = false){
     const active = getActiveShift();
     if(!active){ Utils.toast("No active open shift to close.", "warn"); return; }
+    const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
+    const isSameCashier = curUser && active.cashier && curUser.name.trim().toLowerCase() === active.cashier.trim().toLowerCase();
+    const isJP = curUser && (curUser.name.trim().toLowerCase() === "jp" || curUser.id === "u_jp");
+    const canClose = Boolean(isSameCashier || isJP);
+
+    if(!canClose){
+      Modalz.alert({
+        title: "Permission Denied",
+        message: `This shift belongs to ${active.cashier}. Only ${active.cashier} or the JP account can close active shifts.`
+      });
+      return;
+    }
     const totals = calculateShiftTotals(active);
     const expected = totals.expectedCash;
 
@@ -596,8 +618,8 @@ const Shift = (() => {
         shiftLogs.unshift(activeLogEntry);
       }
     }
-    // (2026-07-13) Auto-sync cloud shift logs on logs tab; was manual-only
-    if(activeTab === "logs" && Date.now() - lastLogsCloudSyncTs > 15000){
+    // (2026-07-13) Auto-sync cloud shift if none active; was logs tab only
+    if((activeTab === "logs" || !activeShift) && Date.now() - lastLogsCloudSyncTs > 5000){
       setTimeout(() => { recoverShiftFromCloud(true); }, 50);
     }
 
@@ -655,16 +677,26 @@ const Shift = (() => {
       });
     });
 
+    // (2026-07-13) Restrict close to shift cashier or JP admin; was all admins
+    const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
+    const isSameCashier = curUser && activeShift?.cashier && curUser.name.trim().toLowerCase() === activeShift.cashier.trim().toLowerCase();
+    const isJP = curUser && (curUser.name.trim().toLowerCase() === "jp" || curUser.id === "u_jp");
+    const isShiftOwner = Boolean(activeShift && isSameCashier);
+    const canForceClose = Boolean(activeShift && !isSameCashier && isJP);
+
     // Action button listeners
     document.getElementById("btn-open-new-shift")?.addEventListener("click", openStartShiftModal);
-    document.getElementById("btn-close-active-shift")?.addEventListener("click", openEndShiftModal);
-    document.getElementById("btn-shift-pay-in")?.addEventListener("click", () => openCashAdjustmentModal("in"));
-    document.getElementById("btn-shift-pay-out")?.addEventListener("click", () => openCashAdjustmentModal("out"));
-    document.getElementById("btn-shift-open-drawer")?.addEventListener("click", () => {
-      // (2026-07-13) Polished shift card layout and interactive receipts; was plain
-      Utils.openCashDrawer();
-      Utils.toast("Cash drawer kicked open.", "info");
-    });
+    if(isShiftOwner){
+      document.getElementById("btn-close-active-shift")?.addEventListener("click", () => openEndShiftModal(false));
+      document.getElementById("btn-shift-pay-in")?.addEventListener("click", () => openCashAdjustmentModal("in"));
+      document.getElementById("btn-shift-pay-out")?.addEventListener("click", () => openCashAdjustmentModal("out"));
+      document.getElementById("btn-shift-open-drawer")?.addEventListener("click", () => {
+        Utils.openCashDrawer();
+        Utils.toast("Cash drawer kicked open.", "info");
+      });
+    } else if(canForceClose){
+      document.getElementById("btn-force-close-shift")?.addEventListener("click", () => openEndShiftModal(true));
+    }
     // (2026-07-13) Allow switching active cashier on duty mid-shift; was static
     document.getElementById("btn-shift-change-cashier")?.addEventListener("click", () => {
       // (2026-07-13) Filter cashiers only for shift change; was all users
@@ -713,33 +745,75 @@ const Shift = (() => {
       });
     });
 
-    // (2026-07-13) Auto-delete shift log row with snapshot sync; was confirm modal
+    // (2026-07-13) Confirm modal on shift delete with JP open access; was raw del
     if(Auth.isAdmin()){
       root.querySelectorAll("[data-delete-shift-log]").forEach(btn => {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
           const logId = btn.getAttribute("data-delete-shift-log");
-          const tr = btn.closest("tr");
-          const card = btn.closest(".shift-log-card") || document.querySelector(`.shift-log-card [data-delete-shift-log="${logId}"]`)?.closest(".shift-log-card");
-          if(tr) tr.remove();
-          if(card) card.remove();
-          if(DB.deleteShiftLog) DB.deleteShiftLog(logId);
-          const currentLogs = DB.getShiftLogs ? DB.getShiftLogs() : [];
-          const tabLogsBtn = document.getElementById("tab-shift-logs");
-          if(tabLogsBtn){
-            const span = tabLogsBtn.querySelector("span");
-            if(span) span.textContent = `Shift Logs (${currentLogs.length})`;
-          }
-          if(typeof Sync !== "undefined" && Sync.pushSnapshot){
-            Sync.pushSnapshot(true).catch(e => console.warn(e));
-          }
-          if(typeof RealtimeSync !== "undefined" && RealtimeSync.deleteShiftLogFromCloud){
-            RealtimeSync.deleteShiftLogFromCloud(logId).catch(e => console.warn(e));
-          }
-          Utils.toast("Shift log deleted.", "info", 900);
-          if(!currentLogs.length){
-            render();
-          }
+          if(!logId) return;
+
+          const allLogs = (DB.getShiftLogs ? DB.getShiftLogs() : []);
+          const targetLog = shiftLogs.find(l => String(l.id) === String(logId)) || allLogs.find(l => String(l.id) === String(logId));
+          const isOpenLog = targetLog?.status === "open" || logId === "shift_active" || (activeShift && String(activeShift.id) === String(logId));
+
+          Modalz.confirm({
+            title: isOpenLog ? "Delete Open Shift Entirely?" : "Delete Shift Log?",
+            message: isOpenLog
+              ? `Permanently delete this active open shift (${targetLog?.cashier || activeShift?.cashier || "Cashier"})? This will remove all records for this shift.`
+              : "Are you sure you want to permanently delete this shift log?",
+            danger: true,
+            onConfirm: () => {
+              const tr = btn.closest("tr");
+              const card = btn.closest(".shift-log-card") || document.querySelector(`.shift-log-card [data-delete-shift-log="${logId}"]`)?.closest(".shift-log-card");
+              if(tr) tr.remove();
+              if(card) card.remove();
+
+              const active = getActiveShift();
+              const isMatchActive = active && (String(active.id) === String(logId) || logId === "shift_active" || (isOpenLog && active.openedAt === targetLog?.openedAt));
+              if(isMatchActive){
+                DB.setShift({ openedAt: null, openingCash: 0, cashier: null, status: "closed", closedAt: Date.now() });
+                if(typeof RealtimeSync !== "undefined" && RealtimeSync.closeShift){
+                  RealtimeSync.closeShift({ id: logId, status: "closed", closedAt: Date.now() }).catch(err => console.warn(err));
+                }
+              }
+
+              if(DB.deleteShiftLog) DB.deleteShiftLog(logId);
+              if(targetLog?.id && targetLog.id !== logId && DB.deleteShiftLog){
+                DB.deleteShiftLog(targetLog.id);
+              }
+              if(isOpenLog && targetLog?.openedAt){
+                allLogs.filter(l => l && l.openedAt === targetLog.openedAt).forEach(l => {
+                  if(DB.deleteShiftLog) DB.deleteShiftLog(l.id);
+                  if(typeof RealtimeSync !== "undefined" && RealtimeSync.deleteShiftLogFromCloud){
+                    RealtimeSync.deleteShiftLogFromCloud(l.id).catch(err => console.warn(err));
+                  }
+                });
+              }
+
+              const currentLogs = DB.getShiftLogs ? DB.getShiftLogs() : [];
+              const tabLogsBtn = document.getElementById("tab-shift-logs");
+              if(tabLogsBtn){
+                const span = tabLogsBtn.querySelector("span");
+                if(span) span.textContent = `Shift Logs (${currentLogs.length})`;
+              }
+
+              if(typeof Sync !== "undefined" && Sync.pushSnapshot){
+                Sync.pushSnapshot(true).catch(err => console.warn(err));
+              }
+              if(typeof RealtimeSync !== "undefined" && RealtimeSync.deleteShiftLogFromCloud){
+                RealtimeSync.deleteShiftLogFromCloud(logId).catch(err => console.warn(err));
+                if(targetLog?.id && targetLog.id !== logId){
+                  RealtimeSync.deleteShiftLogFromCloud(targetLog.id).catch(err => console.warn(err));
+                }
+              }
+              if(typeof App !== "undefined" && App.paintTopbar){
+                App.paintTopbar();
+              }
+              Utils.toast(isOpenLog ? "Open shift deleted entirely." : "Shift log deleted.", "info", 900);
+              render();
+            }
+          });
         });
       });
     }
@@ -835,9 +909,14 @@ const Shift = (() => {
       `;
     }
 
+    // (2026-07-13) Allow only JP account to force close active shift; was all admins
+    const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
+    const isSameCashier = curUser && active.cashier && curUser.name.trim().toLowerCase() === active.cashier.trim().toLowerCase();
+    const isJP = curUser && (curUser.name.trim().toLowerCase() === "jp" || curUser.id === "u_jp");
+    const isOwner = Boolean(isSameCashier);
+    const canForceClose = Boolean(!isSameCashier && isJP);
+
     return `
-      <!-- Active Shift Banner -->
-      <!-- (2026-07-13) 3-col quick actions and consolidated metrics list; was half-rows -->
       <!-- Active Shift Banner -->
       <div class="card shift-active-card">
         <div class="shift-active-header">
@@ -851,7 +930,8 @@ const Shift = (() => {
                 <span class="badge shift-badge-duty">
                   <span class="shift-duty-dot"></span> ACTIVE ON DUTY
                 </span>
-                <!-- (2026-07-13) Remove change cashier button during active shift; was button -->
+                <!-- (2026-07-13) Remove terminal chip; was active.deviceName badge -->
+                ${isOwner ? "" : canForceClose ? `<span class="badge" style="font-size:.72rem;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;font-weight:700;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#EF4444;margin-right:4px;"></span>JP FORCE CLOSE ACCESS</span>` : `<span class="badge" style="font-size:.72rem;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;font-weight:700;"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#4F46E5;margin-right:4px;"></span>VIEW ONLY</span>`}
               </div>
               <div class="text-xs text-faint shift-cashier-meta">
                 <span>Time In: <strong style="color:var(--ink);">${Utils.fmtDate(active.openedAt)}</strong></span>
@@ -863,26 +943,79 @@ const Shift = (() => {
         </div>
 
         <div class="shift-action-cluster">
-          <div class="shift-quick-actions">
-            <button class="btn btn-outline shift-quick-btn font-bold" id="btn-shift-open-drawer">
+          ${isOwner ? `
+            <div class="shift-quick-actions">
+              <button class="btn btn-outline shift-quick-btn font-bold" id="btn-shift-open-drawer">
+                ${Icons.get("lock",{size:15})}
+                <span>Pop Drawer</span>
+              </button>
+              <button class="btn btn-outline shift-quick-btn font-bold" id="btn-shift-pay-in">
+                ${Icons.get("plus",{size:15})}
+                <span>Pay In</span>
+              </button>
+              <button class="btn btn-outline shift-quick-btn font-bold" id="btn-shift-pay-out">
+                ${Icons.get("minus",{size:15})}
+                <span>Pay Out</span>
+              </button>
+            </div>
+            <button class="btn btn-danger shift-close-btn font-bold" id="btn-close-active-shift">
               ${Icons.get("lock",{size:15})}
-              <span>Pop Drawer</span>
+              <span>Close Shift</span>
             </button>
-            <button class="btn btn-outline shift-quick-btn font-bold" id="btn-shift-pay-in">
-              ${Icons.get("plus",{size:15})}
-              <span>Pay In</span>
+          ` : canForceClose ? `
+            <div class="shift-quick-actions">
+              <button class="btn btn-outline shift-quick-btn font-bold" disabled style="opacity:0.45;cursor:not-allowed;" title="Drawer kick disabled in View Only mode">
+                ${Icons.get("lock",{size:15})}
+                <span>Pop Drawer</span>
+              </button>
+              <button class="btn btn-outline shift-quick-btn font-bold" disabled style="opacity:0.45;cursor:not-allowed;" title="Pay In disabled in View Only mode">
+                ${Icons.get("plus",{size:15})}
+                <span>Pay In</span>
+              </button>
+              <button class="btn btn-outline shift-quick-btn font-bold" disabled style="opacity:0.45;cursor:not-allowed;" title="Pay Out disabled in View Only mode">
+                ${Icons.get("minus",{size:15})}
+                <span>Pay Out</span>
+              </button>
+            </div>
+            <button class="btn btn-danger shift-close-btn font-bold" id="btn-force-close-shift" title="Force close active shift as JP admin">
+              ${Icons.get("lock",{size:15})}
+              <span>Force Close Shift</span>
             </button>
-            <button class="btn btn-outline shift-quick-btn font-bold" id="btn-shift-pay-out">
-              ${Icons.get("minus",{size:15})}
-              <span>Pay Out</span>
+          ` : `
+            <div class="shift-quick-actions">
+              <button class="btn btn-outline shift-quick-btn font-bold" disabled style="opacity:0.45;cursor:not-allowed;" title="Drawer kick disabled in View Only mode">
+                ${Icons.get("lock",{size:15})}
+                <span>Pop Drawer</span>
+              </button>
+              <button class="btn btn-outline shift-quick-btn font-bold" disabled style="opacity:0.45;cursor:not-allowed;" title="Pay In disabled in View Only mode">
+                ${Icons.get("plus",{size:15})}
+                <span>Pay In</span>
+              </button>
+              <button class="btn btn-outline shift-quick-btn font-bold" disabled style="opacity:0.45;cursor:not-allowed;" title="Pay Out disabled in View Only mode">
+                ${Icons.get("minus",{size:15})}
+                <span>Pay Out</span>
+              </button>
+            </div>
+            <button class="btn btn-secondary shift-close-btn font-bold" disabled style="opacity:0.6;cursor:not-allowed;" title="Only ${Utils.escapeHtml(active.cashier || 'Cashier')} or JP can close this shift">
+              ${Icons.get("lock",{size:15})}
+              <span>View Only</span>
             </button>
-          </div>
-          <button class="btn btn-danger shift-close-btn font-bold" id="btn-close-active-shift">
-            ${Icons.get("lock",{size:15})}
-            <span>Close Shift</span>
-          </button>
+          `}
         </div>
       </div>
+      ${!isOwner ? (canForceClose ? `
+        <!-- (2026-07-13) JP force close notice; was standard view-only -->
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--paper-dim);border:1px solid var(--line);border-radius:12px;font-size:0.8rem;color:var(--ink-soft);margin-bottom:14px;">
+          <span>⚠️</span>
+          <span>Active shift opened by <strong>${Utils.escapeHtml(active.cashier || 'Cashier')}</strong>. Logged in as <strong>JP</strong> (Force Close authorized).</span>
+        </div>
+      ` : `
+        <!-- (2026-07-13) Clean view-only shift banner; was deviceName notice -->
+        <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--paper-dim);border:1px solid var(--line);border-radius:12px;font-size:0.8rem;color:var(--ink-soft);margin-bottom:14px;">
+          <span>ℹ️</span>
+          <span>Active shift opened by <strong>${Utils.escapeHtml(active.cashier || 'Cashier')}</strong>. You are in <strong>View Only</strong> mode.</span>
+        </div>
+      `) : ""}
 
       <!-- Register & Drawer Cash Metrics Cards -->
       <div class="shift-metrics-container">
@@ -1007,6 +1140,8 @@ const Shift = (() => {
 
   // (2026-07-13) Show sync button in logs header & empty state; was empty only
   function renderLogsTab(logs){
+    const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
+    const isJP = curUser && (curUser.name.trim().toLowerCase() === "jp" || curUser.id === "u_jp");
     const syncBtn = `
       <button class="btn btn-sm btn-outline" id="btn-sync-shift-logs" style="display:inline-flex;align-items:center;gap:6px;">
         ${Icons.get("cloud-download",{size:14})} <span>Sync Cloud History</span>
@@ -1052,6 +1187,7 @@ const Shift = (() => {
             <tbody>
               ${logs.map(log => {
                 const isOpen = log.status === "open";
+                const canDelete = (!isOpen && Auth.isAdmin()) || (isOpen && isJP);
                 const diff = Number(log.variance || 0);
                 const diffColor = diff < -0.01 ? "var(--danger)" : diff > 0.01 ? "var(--warning-deep)" : "var(--success-deep)";
                 // (2026-07-13) Safe date parsing for shift log row; was raw new Date
@@ -1080,8 +1216,8 @@ const Shift = (() => {
                     <td style="text-align:center;">
                       ${isOpen ? `<button class="btn btn-xs btn-primary font-bold" data-goto-active-shift="1">View</button>` : `<button class="btn btn-xs btn-outline" data-print-shift-log="${log.id}" title="Print shift receipt">${Icons.get("printer",{size:13})}</button>`}
                     </td>
-                    <!-- (2026-07-13) Admin delete cell per log row; was no delete -->
-                    ${Auth.isAdmin() ? `<td style="text-align:center;">${isOpen ? "—" : `<button class="btn btn-xs btn-ghost text-danger" data-delete-shift-log="${log.id}" title="Delete shift log">${Icons.get("trash",{size:12})}</button>`}</td>` : ""}
+                    <!-- (2026-07-13) Delete cell with JP open-shift override; was isOpen:dash -->
+                    ${Auth.isAdmin() ? `<td style="text-align:center;">${canDelete ? `<button class="btn btn-xs btn-ghost text-danger" data-delete-shift-log="${log.id}" title="${isOpen ? 'Delete open shift entirely' : 'Delete shift log'}">${Icons.get("trash",{size:12})}</button>` : "—"}</td>` : ""}
                   </tr>
                 `;
               }).join("")}
@@ -1093,6 +1229,7 @@ const Shift = (() => {
         <div class="shift-mobile-cards">
           ${logs.map(log => {
             const isOpen = log.status === "open";
+            const canDelete = (!isOpen && Auth.isAdmin()) || (isOpen && isJP);
             const diff = Number(log.variance || 0);
             const diffColor = diff < -0.01 ? "var(--danger)" : diff > 0.01 ? "var(--warning-deep)" : "var(--success-deep)";
             // (2026-07-13) Safe date parsing for shift log card; was raw new Date
@@ -1113,8 +1250,8 @@ const Shift = (() => {
                       ${isOpen ? 'ACTIVE' : Utils.escapeHtml(log.cashier || "Cashier")}
                     </span>
                     ${!isOpen ? `<button class="btn btn-xs btn-outline" data-print-shift-log="${log.id}" title="Print shift receipt">${Icons.get("printer",{size:13})}</button>` : `<button class="btn btn-xs btn-primary font-bold" data-goto-active-shift="1">View</button>`}
-                    <!-- (2026-07-13) Admin delete button on mobile card; was no delete -->
-                    ${Auth.isAdmin() && !isOpen ? `<button class="btn btn-xs btn-ghost text-danger" data-delete-shift-log="${log.id}" title="Delete shift log">${Icons.get("trash",{size:13})}</button>` : ""}
+                    <!-- (2026-07-13) Mobile delete button with JP open access; was !isOpen only -->
+                    ${canDelete ? `<button class="btn btn-xs btn-ghost text-danger" data-delete-shift-log="${log.id}" title="${isOpen ? 'Delete open shift entirely' : 'Delete shift log'}">${Icons.get("trash",{size:13})}</button>` : ""}
                   </div>
                 </div>
                 <table class="shift-card-table">
@@ -1234,59 +1371,32 @@ const Shift = (() => {
     }
   }
 
-  // (2026-07-13) Tolerate reload & auto-close shift on exit; was closing on reload
+  // (2026-07-13) Prompt beforeunload on active shift exit; was silent close
   if(typeof window !== "undefined"){
     window.addEventListener("beforeunload", (e) => {
       const active = getActiveShift();
-      if(active){
-        sessionStorage.setItem("mm_reloading_shift", JSON.stringify(active));
-        e.preventDefault();
-        e.returnValue = "You have an active shift in progress. Please end your shift before closing.";
-        return e.returnValue;
+      if(active && active.status === "open"){
+        const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
+        const isSameCashier = curUser && active.cashier && curUser.name.trim().toLowerCase() === active.cashier.trim().toLowerCase();
+        if(isSameCashier || (curUser && curUser.role === "admin")){
+          sessionStorage.setItem("mm_reloading_shift", JSON.stringify(active));
+          e.preventDefault();
+          e.returnValue = "You have an active shift in progress. Close shift before leaving?";
+          return e.returnValue;
+        }
       }
     });
 
-    const onForceClose = () => {
-      const active = getActiveShift();
-      if(active){
-        sessionStorage.setItem("mm_active_shift_backup", JSON.stringify(active));
-        forceCloseActiveShift("Force closed tab/window");
-      }
-    };
-    // (2026-07-13) Use pagehide only for tab exit; was unload violation
-    window.addEventListener("pagehide", onForceClose);
-
-    const isReload = (window.performance && performance.getEntriesByType && performance.getEntriesByType("navigation")[0]?.type === "reload") ||
-                     (window.performance && performance.navigation && performance.navigation.type === 1) ||
-                     Boolean(sessionStorage.getItem("mm_reloading_shift"));
-
-    const shiftBackupStr = sessionStorage.getItem("mm_active_shift_backup") || sessionStorage.getItem("mm_reloading_shift");
-    if(isReload && shiftBackupStr){
-      try {
-        const restoredShift = JSON.parse(shiftBackupStr);
-        if(restoredShift && restoredShift.status === "open"){
-          const logs = (DB.getShiftLogs ? DB.getShiftLogs() : []).filter(l => !(l.notes === "Force closed tab/window" && (Date.now() - (l.closedAt || 0)) < 45000));
-          if(DB.setShiftLogs) DB.setShiftLogs(logs);
-          DB.setShift(restoredShift);
-          if(typeof RealtimeSync !== "undefined" && RealtimeSync.openShift){
-            RealtimeSync.openShift(restoredShift).catch(()=>{});
-          }
-        }
-      } catch(e){}
-    } else {
-      const active = getActiveShift();
-      if(active && !sessionStorage.getItem("mm_browser_session_active")){
-        forceCloseActiveShift("Force closed / Browser shutdown");
-      }
-    }
-    sessionStorage.removeItem("mm_reloading_shift");
-    sessionStorage.removeItem("mm_active_shift_backup");
     sessionStorage.setItem("mm_browser_session_active", "1");
 
     if(window.Capacitor?.Plugins?.App){
       window.Capacitor.Plugins.App.addListener('backButton', ({ canGoBack }) => {
         const active = getActiveShift();
-        if(active && !canGoBack){
+        const myDevId = DB.getDeviceId ? DB.getDeviceId() : (localStorage.getItem("mm_deviceId") || "");
+        const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
+        const isSameDev = active && (!active.deviceId || active.deviceId === myDevId);
+        const isSameCash = active && curUser && active.cashier && curUser.name.trim().toLowerCase() === active.cashier.trim().toLowerCase();
+        if(active && active.status === "open" && isSameDev && isSameCash && !canGoBack){
           Modalz.alert({
             title: "End Shift Required",
             message: "You have an active shift in progress. You must end your shift first before closing the app."
@@ -1297,7 +1407,11 @@ const Shift = (() => {
     }
     document.addEventListener("backbutton", (e) => {
       const active = getActiveShift();
-      if(active){
+      const myDevId = DB.getDeviceId ? DB.getDeviceId() : (localStorage.getItem("mm_deviceId") || "");
+      const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
+      const isSameDev = active && (!active.deviceId || active.deviceId === myDevId);
+      const isSameCash = active && curUser && active.cashier && curUser.name.trim().toLowerCase() === active.cashier.trim().toLowerCase();
+      if(active && active.status === "open" && isSameDev && isSameCash){
         e.preventDefault();
         Modalz.alert({
           title: "End Shift Required",
@@ -1308,6 +1422,102 @@ const Shift = (() => {
     });
   }
 
-  // (2026-07-13) Export recoverShiftFromCloud API; was unexported
-  return { render, openStartShiftModal, openEndShiftModal, getActiveShift, forceCloseActiveShift, recoverShiftFromCloud };
+  // (2026-07-13) Configurable shift open/close reminders; was hardcoded times
+  let lastReminderCheckMinute = -1;
+  function checkReminders(now = new Date()){
+    if(typeof Auth === "undefined" || !Auth.currentUser()) return;
+    const settings = (typeof DB !== "undefined" && DB.getSettings) ? DB.getSettings() : {};
+    if(settings.shiftRemindersEnabled === false) return;
+
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const minuteKey = h * 60 + m;
+    if(minuteKey === lastReminderCheckMinute) return;
+    lastReminderCheckMinute = minuteKey;
+
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const active = getActiveShift();
+    const nowMin = h * 60 + m;
+
+    const openTimeStr = settings.shiftReminderOpenTime || "08:10";
+    const [openH, openM] = openTimeStr.split(":").map(Number);
+    const openMin = (isNaN(openH) ? 8 : openH) * 60 + (isNaN(openM) ? 10 : openM);
+
+    const closeTimeStr = settings.shiftReminderCloseTime || "17:00";
+    const [closeH, closeM] = closeTimeStr.split(":").map(Number);
+    const closeMin = (isNaN(closeH) ? 17 : closeH) * 60 + (isNaN(closeM) ? 0 : closeM);
+
+    // Configurable Reminder to Open Shift
+    if(nowMin >= openMin && nowMin <= openMin + 45){
+      const openKey = `shift_remind_open_${todayStr}`;
+      if(!active && !localStorage.getItem(openKey)){
+        localStorage.setItem(openKey, "1");
+        if(typeof Utils !== "undefined" && Utils.Sound?.alarm) Utils.Sound.alarm();
+        if(typeof Modalz !== "undefined"){
+          Modalz.open({
+            title: `⏰ Shift Reminder (${openTimeStr})`,
+            body: `
+              <div style="text-align:center;padding:12px 8px;">
+                <div style="font-size:2.2rem;margin-bottom:8px;">☀️</div>
+                <h4 style="margin:0 0 6px;font-size:1.15rem;font-weight:800;color:var(--ink);">Time to Open Your Shift!</h4>
+                <p style="margin:0;color:var(--ink-soft);font-size:0.9rem;line-height:1.5;">It is ${openTimeStr}. Count starting cash float and open your shift to begin ringing up sales.</p>
+              </div>
+            `,
+            actions: [
+              { label: "Dismiss", cls: "btn-ghost" },
+              {
+                label: "Open Shift Now",
+                cls: "btn-primary font-bold",
+                onClick: () => {
+                  Modalz.close();
+                  if(typeof App !== "undefined" && App.navigate) App.navigate("shift");
+                  openStartShiftModal();
+                }
+              }
+            ]
+          });
+        }
+      }
+    }
+
+    // Configurable Reminder to Close Shift
+    if(nowMin >= closeMin && nowMin < 24 * 60){
+      const closeKey = `shift_remind_close_${todayStr}`;
+      const myDevId = DB.getDeviceId ? DB.getDeviceId() : (localStorage.getItem("mm_deviceId") || "");
+      const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
+      const isOwner = Boolean(active && (!active.deviceId || active.deviceId === myDevId) && (curUser && active.cashier && curUser.name.trim().toLowerCase() === active.cashier.trim().toLowerCase()));
+
+      if(active && isOwner && !localStorage.getItem(closeKey)){
+        localStorage.setItem(closeKey, "1");
+        if(typeof Utils !== "undefined" && Utils.Sound?.alarm) Utils.Sound.alarm();
+        if(typeof Modalz !== "undefined"){
+          Modalz.open({
+            title: `⏰ Shift Reminder (${closeTimeStr})`,
+            body: `
+              <div style="text-align:center;padding:12px 8px;">
+                <div style="font-size:2.2rem;margin-bottom:8px;">🌙</div>
+                <h4 style="margin:0 0 6px;font-size:1.15rem;font-weight:800;color:var(--ink);">Time to Close Your Shift!</h4>
+                <p style="margin:0;color:var(--ink-soft);font-size:0.9rem;line-height:1.5;">It is ${closeTimeStr}. Please count cash in drawer, reconcile sales, and end your active shift.</p>
+              </div>
+            `,
+            actions: [
+              { label: "Remind Later", cls: "btn-ghost" },
+              {
+                label: "Close Shift Now",
+                cls: "btn-danger font-bold",
+                onClick: () => {
+                  Modalz.close();
+                  if(typeof App !== "undefined" && App.navigate) App.navigate("shift");
+                  openEndShiftModal();
+                }
+              }
+            ]
+          });
+        }
+      }
+    }
+  }
+
+  // (2026-07-13) Export checkReminders in shift API; was unexported
+  return { render, openStartShiftModal, openEndShiftModal, getActiveShift, forceCloseActiveShift, recoverShiftFromCloud, checkReminders };
 })();

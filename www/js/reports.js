@@ -1125,8 +1125,20 @@ const Reports = (() => {
   let timeFilter = "all";
   let employeeFilter = "all";
 
+  // (2026-07-13) Auto-reload This Month daily through today; was frozen activeRange
   function getActiveRange(){
-    if(activeRange) return activeRange;
+    if(activeRange){
+      if(periodKey === "this_month" || activeRange.key === "this_month"){
+        const cur = new Date();
+        const s = new Date(cur.getFullYear(), cur.getMonth(), 1, 0, 0, 0, 0).getTime();
+        const e = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), 23, 59, 59, 999).getTime();
+        activeRange.start = s;
+        activeRange.end = e;
+        activeRange.label = fmtDateRangeLabel({ start: s, end: e });
+        activeRange.subtitle = `${new Date(s).toLocaleDateString("en-PH",{month:"short",day:"numeric"})} – ${new Date(e).toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})}`;
+      }
+      return activeRange;
+    }
     return Analytics.getPeriodRange(periodKey);
   }
 
@@ -2867,6 +2879,13 @@ const Reports = (() => {
     const txCount = stats.storeTxCount || 0;
     const avgSale = txCount > 0 ? (netSales / txCount) : 0;
     const margin = netSales > 0 ? (grossProfit / netSales) * 100 : 0;
+    const activeR = getActiveRange();
+    const oneDayMs = 86400000;
+    const startTs = (activeR && activeR.start > oneDayMs) ? activeR.start : (storeSales.length ? Math.min(...storeSales.map(s=>s.ts).filter(Boolean)) : Date.now());
+    const endTs = (activeR && activeR.end) ? Math.min(activeR.end, Date.now()) : Date.now();
+    const elapsedDays = Math.max(1, Math.floor((endTs - startTs) / oneDayMs) + 1);
+    const avgDailySales = netSales / elapsedDays;
+    const avgDailyProfit = grossProfit / elapsedDays;
 
     el.innerHTML = `
       <div class="card" style="margin-bottom:16px;padding:16px 18px;">
@@ -2900,6 +2919,12 @@ const Reports = (() => {
           <div style="background:var(--paper-dim);padding:12px 14px;border-radius:var(--r-md);border:1px solid var(--line);">
             <div class="text-sm" style="font-size:0.82rem;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;color:var(--ink-soft);">Gross Profit</div>
             <div class="mono font-bold" style="font-size:1.35rem;color:var(--success-deep);">${Utils.money(grossProfit)} <span style="font-size:0.80rem;font-weight:700;color:var(--ink-soft);">(${margin.toFixed(1)}%)</span></div>
+          </div>
+          <!-- (2026-07-13) Add daily average sales & profit card; was missing -->
+          <div style="background:var(--paper-dim);padding:12px 14px;border-radius:var(--r-md);border:1px solid var(--line);">
+            <div class="text-sm" style="font-size:0.82rem;font-weight:800;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;color:var(--ink-soft);">Daily Average</div>
+            <div class="mono font-bold" style="font-size:1.15rem;color:var(--brand-deep);">${Utils.money(avgDailySales)}<span style="font-size:0.75rem;font-weight:600;color:var(--ink-soft);margin-left:4px;">sales/day</span></div>
+            <div class="mono font-bold" style="font-size:0.95rem;color:var(--success-deep);margin-top:2px;">${Utils.money(avgDailyProfit)}<span style="font-size:0.75rem;font-weight:600;color:var(--ink-soft);margin-left:4px;">profit/day</span></div>
           </div>
         </div>
       </div>`;

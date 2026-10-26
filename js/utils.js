@@ -327,6 +327,13 @@ const Utils = (() => {
     error: () => {
       playTone(220, "sawtooth", 0.08, 0.15, 0);
       playTone(180, "sawtooth", 0.12, 0.15, 0.09);
+    },
+    // (2026-07-13) Add shift reminder alarm chime synthesizer; was none
+    alarm: () => {
+      [0, 0.22, 0.44].forEach(d => {
+        playTone(784, "sine", 0.12, 0.20, d);
+        playTone(1046.50, "sine", 0.14, 0.18, d + 0.08);
+      });
     }
   };
 

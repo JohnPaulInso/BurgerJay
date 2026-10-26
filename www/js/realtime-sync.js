@@ -245,8 +245,9 @@ const RealtimeSync = (() => {
         return;
       }
       
-      // Update local with cloud data - preserve all timing data
-      if (!localShift || cloudShift.updatedAt > (localShift.updatedAt || 0)) {
+      // (2026-07-13) Accept live cloud shifts across devices; was timestamp gated
+      const shouldSync = !localShift || cloudShift.status === 'open' || (cloudShift.updatedAt || 0) >= (localShift.updatedAt || 0);
+      if (shouldSync) {
         const fullShiftData = {
           ...cloudShift,
           openedAt: cloudShift.openedAt,

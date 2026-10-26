@@ -131,9 +131,22 @@ const App = (() => {
     const s = DB.getShift ? DB.getShift() : null;
     const isOpen = Boolean(s && s.status === "open");
     if(isOpen){
+      // (2026-07-13) Distinguish shift owner and JP admin in topbar; was owner only
+      const u = typeof Auth !== "undefined" && Auth.currentUser ? Auth.currentUser() : null;
+      const isSameCashier = u && s.cashier && u.name.trim().toLowerCase() === s.cashier.trim().toLowerCase();
+      const isJP = u && (u.name.trim().toLowerCase() === "jp" || u.id === "u_jp");
+      const isOwner = Boolean(isSameCashier);
       el.className = "topbar-shift-badge shift-open";
-      el.innerHTML = `<span class="shift-dot green"></span><span>Open<span class="shift-text-extra"> Shift</span></span>`;
-      el.title = `Shift is Open (${s.cashier || "Cashier"}) — Click to manage`;
+      el.innerHTML = isOwner
+        ? `<span class="shift-dot green"></span><span>Open<span class="shift-text-extra"> Shift</span></span>`
+        : isJP
+          ? `<span class="shift-dot green"></span><span>Open<span class="shift-text-extra"> (JP Admin)</span></span>`
+          : `<span class="shift-dot green"></span><span>Open<span class="shift-text-extra"> (View Only)</span></span>`;
+      el.title = isOwner
+        ? `Shift is Open (${s.cashier || "Cashier"}) — Click to manage`
+        : isJP
+          ? `Shift is Open (${s.cashier || "Cashier"}) — Click to force close`
+          : `Shift is Open (${s.cashier || "Cashier"}) — View Only`;
     } else {
       el.className = "topbar-shift-badge shift-closed";
       el.innerHTML = `<span class="shift-dot red"></span><span>Closed<span class="shift-text-extra"> Shift</span></span>`;
@@ -153,7 +166,7 @@ const App = (() => {
     paintShiftIndicator();
   }
 
-  // (2026-07-13) Real-time clock updating every 1s; was static/30s interval
+  // (2026-07-13) Check shift open/close timed reminders; was clock tick only
   function tickClock(){
     const now = new Date();
     const str = now.toLocaleString("en-PH", { weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit" });
@@ -163,6 +176,9 @@ const App = (() => {
     if(posSub){
       const user = Auth.currentUser();
       posSub.textContent = `${user?.name || "Cashier"} · ${now.toLocaleDateString("en-PH",{month:"short",day:"numeric",year:"numeric"})}, ${now.toLocaleTimeString("en-PH",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}`;
+    }
+    if(typeof Shift !== "undefined" && Shift.checkReminders){
+      Shift.checkReminders(now);
     }
   }
 
@@ -300,16 +316,20 @@ const App = (() => {
     document.getElementById("btn-bn-more")?.addEventListener("click", openMobileNav);
     // (2026-07-13) Click shift indicator to open shift management; was no handler
     document.getElementById("topbar-shift-indicator")?.addEventListener("click", () => navigate("shift"));
-    // (2026-07-13) Prompt cashier to close shift on logout; was missing alert fn
+    // (2026-07-13) Guard logout only for shift owner on this device; was all users
     document.getElementById("user-chip").onclick = () => {
       const u = Auth.currentUser();
       const activeShift = (typeof Shift !== "undefined" && Shift.getActiveShift) ? Shift.getActiveShift() : (DB.getShift?.()?.status === "open" ? DB.getShift() : null);
-      if(activeShift){
-        Modalz.alert({
-          title: "Active Shift In Progress",
-          message: "You must close your shift before logging out. Please close shift in Shift Management."
-        });
-        return;
+      if(activeShift && activeShift.status === "open"){
+        // (2026-07-13) Guard logout if active shift belongs to current user; was dev check
+        const isSameCashier = u && u.name && activeShift.cashier && u.name.trim().toLowerCase() === activeShift.cashier.trim().toLowerCase();
+        if(isSameCashier || u?.role === "admin"){
+          Modalz.alert({
+            title: "Active Shift In Progress",
+            message: "You must close your shift before logging out. Please close shift in Shift Management."
+          });
+          return;
+        }
       }
       Modalz.confirm({ title:"Log out?", message:`Sign out ${u?.name || "user"}?`, onConfirm: () => Auth.logout() });
     };

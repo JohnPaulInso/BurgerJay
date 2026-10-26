@@ -12,16 +12,19 @@ const Auth = (() => {
   function currentUser(){ return session; }
   function isAdmin(){ return session?.role === "admin"; }
 
-  // (2026-07-13) Prompt to close shift before logout; was missing alert fn
+  // (2026-07-13) Guard logout if current account owns active shift; was dev check
   function logout(force = false){
     if(!force){
       const activeShift = (typeof Shift !== "undefined" && Shift.getActiveShift) ? Shift.getActiveShift() : (DB.getShift?.()?.status === "open" ? DB.getShift() : null);
-      if(activeShift){
-        Modalz.alert({
-          title: "Active Shift In Progress",
-          message: "You must close your shift before logging out. Please close shift in Shift Management."
-        });
-        return false;
+      if(activeShift && activeShift.status === "open"){
+        const isSameCashier = session && session.name && activeShift.cashier && session.name.trim().toLowerCase() === activeShift.cashier.trim().toLowerCase();
+        if(isSameCashier || session?.role === "admin"){
+          Modalz.alert({
+            title: "Active Shift In Progress",
+            message: "You must close your shift before logging out. Please close shift in Shift Management."
+          });
+          return false;
+        }
       }
     }
     session = null;

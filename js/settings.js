@@ -683,12 +683,33 @@ const Settings = (() => {
             <label class="switch"><input type="checkbox" id="s-theme" ${s.theme==="dark"?"checked":""}><span class="track"></span></label>
           </div>
           <!-- (2026-07-13) Auto-print receipt setting for JK580H 58mm printer; was manual -->
+          <!-- (2026-07-13) Auto-print receipt setting for JK580H 58mm printer; was manual -->
           <div class="switch-row" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px;">
             <div>
               <strong>Auto-Print Receipt After Sale</strong>
               <p class="text-sm text-faint">Direct thermal receipt output for JK580H 58mm printer.</p>
             </div>
             <label class="switch"><input type="checkbox" id="s-autoprint" ${s.autoPrintReceipt !== false ? "checked" : ""}><span class="track"></span></label>
+          </div>
+          <!-- (2026-07-13) Add shift reminders toggle and time settings; was none -->
+          <div class="switch-row" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px;">
+            <div>
+              <strong>Shift Open & Close Reminders</strong>
+              <p class="text-sm text-faint">Play an alarm chime and show a reminder modal to open and close shift.</p>
+            </div>
+            <label class="switch"><input type="checkbox" id="s-shift-reminders" ${s.shiftRemindersEnabled !== false ? "checked" : ""}><span class="track"></span></label>
+          </div>
+          <div id="s-shift-times-container" style="display:${s.shiftRemindersEnabled !== false ? "block" : "none"};margin-top:10px;padding:12px 14px;background:var(--paper-dim);border-radius:10px;border:1px solid var(--line);">
+            <div class="input-row">
+              <div class="field" style="margin-bottom:0;">
+                <label style="font-weight:700;font-size:0.8rem;margin-bottom:4px;display:block;">Open Shift Reminder Time</label>
+                <input class="input" id="s-shift-open-time" type="time" value="${s.shiftReminderOpenTime || '08:10'}" style="height:38px;">
+              </div>
+              <div class="field" style="margin-bottom:0;">
+                <label style="font-weight:700;font-size:0.8rem;margin-bottom:4px;display:block;">Close Shift Reminder Time</label>
+                <input class="input" id="s-shift-close-time" type="time" value="${s.shiftReminderCloseTime || '17:00'}" style="height:38px;">
+              </div>
+            </div>
           </div>
         </div>`;
       document.getElementById("btn-save-business").onclick = saveBusinessInfo;
@@ -701,6 +722,27 @@ const Settings = (() => {
         DB.setSettings(settings);
         Utils.toast(e.target.checked ? "Auto-print enabled for JK580H printer." : "Auto-print disabled.", "info");
       };
+      // (2026-07-13) Wire shift reminder toggle and time listeners; was unhandled
+      document.getElementById("s-shift-reminders").onchange = (e) => {
+        const settings = DB.getSettings();
+        settings.shiftRemindersEnabled = e.target.checked;
+        DB.setSettings(settings);
+        const container = document.getElementById("s-shift-times-container");
+        if(container) container.style.display = e.target.checked ? "block" : "none";
+        Utils.toast(e.target.checked ? "Shift reminders enabled." : "Shift reminders disabled.", "info");
+      };
+      document.getElementById("s-shift-open-time")?.addEventListener("change", (e) => {
+        const settings = DB.getSettings();
+        settings.shiftReminderOpenTime = e.target.value || "08:10";
+        DB.setSettings(settings);
+        Utils.toast(`Open shift reminder set to ${settings.shiftReminderOpenTime}.`, "success");
+      });
+      document.getElementById("s-shift-close-time")?.addEventListener("change", (e) => {
+        const settings = DB.getSettings();
+        settings.shiftReminderCloseTime = e.target.value || "17:00";
+        DB.setSettings(settings);
+        Utils.toast(`Close shift reminder set to ${settings.shiftReminderCloseTime}.`, "success");
+      });
     }
     else if(tab === "staff"){
       wrap.innerHTML = `

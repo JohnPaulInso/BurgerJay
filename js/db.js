@@ -127,6 +127,10 @@ const DB = (() => {
     autoSync: true,
     // (2026-07-13) Default autoPrintReceipt to true; was unset in defaults
     autoPrintReceipt: true,
+    // (2026-07-13) Add shift reminder configuration defaults; was none
+    shiftRemindersEnabled: true,
+    shiftReminderOpenTime: "08:10",
+    shiftReminderCloseTime: "17:00",
     lastView: "pos"
   };
 
@@ -234,10 +238,14 @@ const DB = (() => {
 
     if(!localStorage.getItem(syncFlagKey)){
       if(seedCatalog){
+        // (2026-07-13) Prevent seed catalog re-adding deleted items; was un-checked
         const curProds = read(KEYS.products) || [];
+        const delProdIds = getDeletedProductIds();
         const pMap = new Map();
-        curProds.forEach(p => { if(p && p.id) pMap.set(p.id, p); });
+        curProds.forEach(p => { if(p && p.id && !delProdIds.has(String(p.id).trim())) pMap.set(p.id, p); });
         seedCatalog.products.forEach(p => {
+          const pId = String(p?.id || "").trim();
+          if(!pId || delProdIds.has(pId)) return;
           if(pMap.has(p.id)){
             const ex = pMap.get(p.id);
             pMap.set(p.id, { ...ex, ...p, imageUrl: p.imageUrl || ex.imageUrl });
@@ -300,7 +308,8 @@ const DB = (() => {
     if(read(KEYS.venueLeads) === null) write(KEYS.venueLeads, []);
     if(read(KEYS.stockLog) === null) write(KEYS.stockLog, []);
     if(read(KEYS.cashiers) === null) write(KEYS.cashiers, DEFAULT_CASHIERS);
-    if(read(KEYS.shift) === null) write(KEYS.shift, { openedAt: Date.now(), openingCash: 0 });
+    // (2026-07-13) Default closed shift state; was dummy open timestamp
+    if(read(KEYS.shift) === null) write(KEYS.shift, { status: "closed", openedAt: null, openingCash: 0 });
     if(read(KEYS.syncMeta) === null) write(KEYS.syncMeta, { lastSynced:null, status:"idle" });
     // merge in any NEW default settings keys added in later app versions without clobbering user edits
     const s = read(KEYS.settings);
@@ -437,12 +446,27 @@ const DB = (() => {
     });
   }
 
-  // (2026-07-13) Cache getProducts and getCategories in-memory; was parsed per read
+  // (2026-07-13) Filter deleted products from getProducts; was returning all
   const getProducts   = () => {
-    if(!cachedProducts) cachedProducts = read(KEYS.products, []);
+    if(!cachedProducts){
+      const prods = read(KEYS.products, []);
+      const delIds = getDeletedProductIds();
+      cachedProducts = delIds.size ? prods.filter(p => {
+        const pId = String(p?.id ?? p?._id ?? "").trim();
+        return pId && !delIds.has(pId);
+      }) : prods;
+    }
     return cachedProducts;
   };
-  const setProducts   = (v) => { cachedProducts = null; return write(KEYS.products, sortProductsList(dedupeProductList(v))); };
+  const setProducts   = (v) => {
+    cachedProducts = null;
+    const delIds = getDeletedProductIds();
+    const filtered = (v || []).filter(p => {
+      const pId = String(p?.id ?? p?._id ?? "").trim();
+      return pId && !delIds.has(pId);
+    });
+    return write(KEYS.products, sortProductsList(dedupeProductList(filtered)));
+  };
   function deduplicateProducts(){
     const current = getProducts();
     const deduped = dedupeProductList(current);
@@ -787,11 +811,19 @@ const DB = (() => {
       }
     }
   }
-  // (2026-07-13) Device tag in TXN sequence prevents collisions. Prev: shared max
+  // (2026-07-13) Persistent unique device identifier; was unexposed helper
+  function getDeviceId(){
+    let deviceId = localStorage.getItem("mm_deviceId");
+    if(!deviceId){
+      deviceId = "device_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem("mm_deviceId", deviceId);
+    }
+    return deviceId;
+  }
   function getNextTransactionId(prefix = "TXN"){
     let devId = localStorage.getItem("mm_terminalTag");
     if(!devId){
-      const raw = localStorage.getItem("mm_deviceId") || ("T" + Math.floor(10 + Math.random()*90));
+      const raw = getDeviceId();
       devId = raw.replace(/[^a-zA-Z0-9]/g, "").slice(-3).toUpperCase();
       localStorage.setItem("mm_terminalTag", devId);
     }
@@ -840,8 +872,8 @@ const DB = (() => {
   }
   const getShift       = () => {
     const shift = read(KEYS.shift, null);
-    // Never auto-open a shift - only return if explicitly open
-    if(!shift || shift.status === 'closed') return null;
+    // (2026-07-13) Strict open shift status check; was status === 'closed'
+    if(!shift || shift.status !== 'open') return null;
     return shift;
   };
   const setShift       = (v) => write(KEYS.shift, v);
@@ -1161,12 +1193,16 @@ const DB = (() => {
     const prodId = String(product.id ?? product._id ?? "").trim();
     if(!prodId) return;
     markProductDeleted(prodId);
+    if(product.barcode) markProductDeleted(product.barcode);
     const bin = getTrash().filter(p => String(p.id ?? p._id ?? "").trim() !== prodId);
     bin.unshift({ ...product, _trashedAt: Date.now() });
     write(KEYS.trash, bin);
     setProducts(getProducts().filter(p => String(p.id ?? p._id ?? "").trim() !== prodId));
     if(typeof RealtimeSync !== "undefined" && RealtimeSync.deleteProductFromCloud){
       RealtimeSync.deleteProductFromCloud(prodId);
+    }
+    if(typeof Sync !== "undefined" && Sync.pushSnapshot){
+      Sync.pushSnapshot(true).catch(() => {});
     }
   }
   // (2026-07-13) Support index & barcode in trash restore; was strict ID fail
@@ -1513,11 +1549,10 @@ const DB = (() => {
     isSyncRestoring = true;
     try{
     if(snap.deletedProductIds && Array.isArray(snap.deletedProductIds)){
-      // (2026-07-13) Skip re-tombstone if product already restored in active list; was re-adding stale IDs
-      const activeIds = new Set((getProducts() || []).map(p => String(p.id ?? p._id ?? "").trim()).filter(Boolean));
+      // (2026-07-13) Ingest all snapshot deletedProductIds; was skipping active
       const curDeletedProds = getDeletedProductIds();
       snap.deletedProductIds.forEach(id => {
-        if(id && !activeIds.has(String(id).trim())) curDeletedProds.add(String(id));
+        if(id) curDeletedProds.add(String(id).trim());
       });
       write(KEYS.deletedProductIds, Array.from(curDeletedProds), true);
     }
@@ -1708,7 +1743,7 @@ const DB = (() => {
   }
 
   return {
-    KEYS, init, categoryIcon, getNextTransactionId,
+    KEYS, init, categoryIcon, getDeviceId, getNextTransactionId,
     getProducts, setProducts, deduplicateProducts, addProduct, updateProduct, deleteProduct, findByBarcode, adjustStock,
     getTrash, trashProduct, restoreProductFromTrash, permanentlyDeleteFromTrash, purgeExpiredTrash,
     getCategories, setCategories,
