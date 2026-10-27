@@ -267,7 +267,10 @@ const Shift = (() => {
             deviceName: myDevTag,
             status: "open",
             cashIn: 0,
-            cashOut: 0
+            cashOut: 0,
+            // (2026-07-13) Multi-branch stamp on new shift record; was unbranchable
+            branchId: DB.getCurrentBranchId ? DB.getCurrentBranchId() : "branch_main",
+            branchName: DB.getCurrentBranch ? DB.getCurrentBranch()?.name : "Main Branch"
           };
           
           // Save locally first for instant response
@@ -529,7 +532,10 @@ const Shift = (() => {
             actualCash: actualVal,
             variance,
             notes,
-            status: "closed"
+            status: "closed",
+            // (2026-07-13) Multi-branch stamp on closed shift log; was unbranchable
+            branchId: active.branchId || (DB.getCurrentBranchId ? DB.getCurrentBranchId() : "branch_main"),
+            branchName: active.branchName || (DB.getCurrentBranch ? DB.getCurrentBranch()?.name : "Main Branch")
           };
 
           if(DB.saveShiftLog) DB.saveShiftLog(logRecord);
@@ -1377,8 +1383,9 @@ const Shift = (() => {
       const active = getActiveShift();
       if(active && active.status === "open"){
         const curUser = (typeof Auth !== "undefined" && Auth.currentUser) ? Auth.currentUser() : null;
-        const isSameCashier = curUser && active.cashier && curUser.name.trim().toLowerCase() === active.cashier.trim().toLowerCase();
-        if(isSameCashier || (curUser && curUser.role === "admin")){
+        // (2026-07-13) Prompt beforeunload only for shift cashier; was any admin
+        const isSameCashier = curUser && curUser.name && active.cashier && curUser.name.trim().toLowerCase() === active.cashier.trim().toLowerCase();
+        if(isSameCashier){
           sessionStorage.setItem("mm_reloading_shift", JSON.stringify(active));
           e.preventDefault();
           e.returnValue = "You have an active shift in progress. Close shift before leaving?";

@@ -164,6 +164,181 @@ const App = (() => {
     const av = document.getElementById("user-chip-av");
     if(av) av.textContent = (user?.name||"?").slice(0,1).toUpperCase();
     paintShiftIndicator();
+    // (2026-07-13) Paint active branch label in topbar selector; was single store
+    const curBranch = DB.getCurrentBranch ? DB.getCurrentBranch() : null;
+    const bNameEl = document.getElementById("topbar-branch-name");
+    if(bNameEl && curBranch) bNameEl.textContent = curBranch.name;
+  }
+
+  // (2026-07-13) Topbar branch selector and management modals; was single store
+  function paintBranchDropdown(){
+    const menu = document.getElementById("branch-dropdown-menu");
+    if(!menu) return;
+    const branches = DB.getBranches ? DB.getBranches() : [{ id: "branch_main", name: "Main Branch", code: "MAIN", isDefault: true }];
+    const curBranch = DB.getCurrentBranch ? DB.getCurrentBranch() : branches[0];
+    const isAdmin = Auth.isAdmin ? Auth.isAdmin() : false;
+
+    menu.innerHTML = `
+      <div class="branch-dropdown-header">
+        <span>Branches (${branches.length})</span>
+        ${isAdmin ? `<button type="button" class="btn btn-xs btn-primary font-bold" id="btn-add-branch-quick" style="padding:2px 8px;font-size:0.68rem;">+ Add</button>` : ""}
+      </div>
+      <div class="branch-list-container">
+        ${branches.map(b => {
+          const isCur = String(b.id) === String(curBranch.id);
+          return `
+            <div class="branch-item-row ${isCur ? 'active' : ''}" data-branch-select="${b.id}">
+              <div class="branch-item-info">
+                <span class="branch-item-name">${Utils.escapeHtml(b.name || 'Branch')}</span>
+                ${b.code ? `<span class="branch-item-code">${Utils.escapeHtml(b.code)}</span>` : ''}
+              </div>
+              <div class="branch-item-actions">
+                ${isCur ? `<span class="branch-item-check">${Icons.get("check", {size: 14})}</span>` : ''}
+                ${isAdmin ? `
+                  <button type="button" class="branch-btn-edit" data-branch-edit="${b.id}" title="Rename branch">
+                    ${Icons.get("edit", {size: 13})}
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+
+    menu.querySelectorAll("[data-branch-select]").forEach(row => {
+      row.addEventListener("click", (e) => {
+        if(e.target.closest("[data-branch-edit]")) return;
+        const bId = row.getAttribute("data-branch-select");
+        if(bId && DB.setCurrentBranchId){
+          DB.setCurrentBranchId(bId);
+          menu.classList.add("hidden");
+          document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
+          paintTopbar();
+          const targetB = branches.find(b => String(b.id) === String(bId));
+          Utils.toast(`Switched to ${targetB?.name || "branch"}.`, "success", 1200);
+          rerenderCurrentView();
+        }
+      });
+    });
+
+    if(isAdmin){
+      menu.querySelector("#btn-add-branch-quick")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        menu.classList.add("hidden");
+        document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
+        openAddBranchModal();
+      });
+
+      menu.querySelectorAll("[data-branch-edit]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const bId = btn.getAttribute("data-branch-edit");
+          const target = branches.find(b => String(b.id) === String(bId));
+          if(target){
+            menu.classList.add("hidden");
+            document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
+            openEditBranchModal(target);
+          }
+        });
+      });
+    }
+  }
+
+  function openAddBranchModal(){
+    Modalz.open({
+      title: `${Icons.get("store", {size: 17})} Add New Branch`,
+      body: `
+        <div style="padding:4px 0 10px;">
+          <div class="field" style="margin-bottom:12px;">
+            <label style="font-weight:700;display:block;margin-bottom:6px;">Branch Name *</label>
+            <input type="text" class="input" id="modal-branch-name" placeholder="e.g. Highway Branch" autofocus style="width:100%;height:40px;font-size:0.95rem;">
+          </div>
+          <div class="field" style="margin-bottom:12px;">
+            <label style="font-weight:700;display:block;margin-bottom:6px;">Branch Code (Optional)</label>
+            <input type="text" class="input" id="modal-branch-code" placeholder="e.g. HWY" style="width:100%;height:40px;font-size:0.95rem;text-transform:uppercase;">
+          </div>
+          <div class="field">
+            <label style="font-weight:700;display:block;margin-bottom:6px;">Address / Location (Optional)</label>
+            <input type="text" class="input" id="modal-branch-address" placeholder="e.g. Km 98 National Highway" style="width:100%;height:40px;font-size:0.95rem;">
+          </div>
+        </div>
+      `,
+      actions: [
+        { label: "Cancel", cls: "btn-ghost" },
+        {
+          label: "Create Branch",
+          cls: "btn-primary font-bold",
+          onClick: () => {
+            const nameInput = document.getElementById("modal-branch-name");
+            const name = nameInput ? nameInput.value.trim() : "";
+            if(!name){
+              Utils.toast("Please enter a valid branch name.", "warn");
+              return;
+            }
+            const code = document.getElementById("modal-branch-code")?.value.trim();
+            const address = document.getElementById("modal-branch-address")?.value.trim();
+            const created = DB.saveBranch ? DB.saveBranch({ name, code, address }) : null;
+            if(created){
+              DB.setCurrentBranchId(created.id);
+              Modalz.close();
+              paintTopbar();
+              rerenderCurrentView();
+              Utils.toast(`Branch "${created.name}" created and selected.`, "success");
+              if(typeof Sync !== "undefined" && Sync.pushSnapshot) Sync.pushSnapshot(true).catch(e => console.warn(e));
+            }
+          }
+        }
+      ]
+    });
+  }
+
+  function openEditBranchModal(branch){
+    if(!branch) return;
+    Modalz.open({
+      title: `${Icons.get("edit", {size: 17})} Edit / Rename Branch`,
+      body: `
+        <div style="padding:4px 0 10px;">
+          <div class="field" style="margin-bottom:12px;">
+            <label style="font-weight:700;display:block;margin-bottom:6px;">Branch Name *</label>
+            <input type="text" class="input" id="modal-edit-branch-name" value="${Utils.escapeHtml(branch.name || '')}" autofocus style="width:100%;height:40px;font-size:0.95rem;">
+          </div>
+          <div class="field" style="margin-bottom:12px;">
+            <label style="font-weight:700;display:block;margin-bottom:6px;">Branch Code</label>
+            <input type="text" class="input" id="modal-edit-branch-code" value="${Utils.escapeHtml(branch.code || '')}" style="width:100%;height:40px;font-size:0.95rem;text-transform:uppercase;">
+          </div>
+          <div class="field">
+            <label style="font-weight:700;display:block;margin-bottom:6px;">Address / Location</label>
+            <input type="text" class="input" id="modal-edit-branch-address" value="${Utils.escapeHtml(branch.address || '')}" style="width:100%;height:40px;font-size:0.95rem;">
+          </div>
+        </div>
+      `,
+      actions: [
+        { label: "Cancel", cls: "btn-ghost" },
+        {
+          label: "Save Changes",
+          cls: "btn-primary font-bold",
+          onClick: () => {
+            const nameInput = document.getElementById("modal-edit-branch-name");
+            const name = nameInput ? nameInput.value.trim() : "";
+            if(!name){
+              Utils.toast("Branch name cannot be empty.", "warn");
+              return;
+            }
+            const code = document.getElementById("modal-edit-branch-code")?.value.trim();
+            const address = document.getElementById("modal-edit-branch-address")?.value.trim();
+            const updated = DB.saveBranch ? DB.saveBranch({ ...branch, name, code, address }) : null;
+            if(updated){
+              Modalz.close();
+              paintTopbar();
+              rerenderCurrentView();
+              Utils.toast(`Branch updated to "${updated.name}".`, "success");
+              if(typeof Sync !== "undefined" && Sync.pushSnapshot) Sync.pushSnapshot(true).catch(e => console.warn(e));
+            }
+          }
+        }
+      ]
+    });
   }
 
   // (2026-07-13) Check shift open/close timed reminders; was clock tick only
@@ -265,6 +440,16 @@ const App = (() => {
             </div>
             <span class="topbar-spacer"></span>
             <span class="topbar-clock" id="topbar-clock"></span>
+            <!-- (2026-07-13) Add mobile branch backdrop overlay; was menu only -->
+            <div class="branch-selector-wrap" id="branch-selector-wrap">
+              <button type="button" class="branch-pill-btn" id="btn-branch-selector" title="Select or manage branch">
+                <span class="branch-av">${Icons.get("store", {size: 13})}</span>
+                <span class="branch-name" id="topbar-branch-name">Main Branch</span>
+                <span class="branch-arrow">${Icons.get("chevron-down", {size: 11})}</span>
+              </button>
+              <div class="branch-dropdown-backdrop hidden" id="branch-dropdown-backdrop"></div>
+              <div class="branch-dropdown-menu hidden" id="branch-dropdown-menu"></div>
+            </div>
             <button class="icon-btn" id="theme-toggle-btn" title="Toggle theme"></button>
             <div class="user-chip" id="user-chip">
               <span class="av" id="user-chip-av"></span>
@@ -321,9 +506,9 @@ const App = (() => {
       const u = Auth.currentUser();
       const activeShift = (typeof Shift !== "undefined" && Shift.getActiveShift) ? Shift.getActiveShift() : (DB.getShift?.()?.status === "open" ? DB.getShift() : null);
       if(activeShift && activeShift.status === "open"){
-        // (2026-07-13) Guard logout if active shift belongs to current user; was dev check
+        // (2026-07-13) Guard logout only for shift cashier; was any admin
         const isSameCashier = u && u.name && activeShift.cashier && u.name.trim().toLowerCase() === activeShift.cashier.trim().toLowerCase();
-        if(isSameCashier || u?.role === "admin"){
+        if(isSameCashier){
           Modalz.alert({
             title: "Active Shift In Progress",
             message: "You must close your shift before logging out. Please close shift in Shift Management."
@@ -343,6 +528,34 @@ const App = (() => {
       paintThemeIcon();
     };
     paintThemeIcon();
+
+    // (2026-07-13) Branch toggle with mobile backdrop support; was menu-only
+    const closeBranchDropdown = () => {
+      document.getElementById("branch-dropdown-menu")?.classList.add("hidden");
+      document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
+    };
+    document.getElementById("btn-branch-selector")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const menu = document.getElementById("branch-dropdown-menu");
+      const backdrop = document.getElementById("branch-dropdown-backdrop");
+      if(menu){
+        const isHidden = menu.classList.contains("hidden");
+        if(isHidden){
+          paintBranchDropdown();
+          menu.classList.remove("hidden");
+          backdrop?.classList.remove("hidden");
+        } else {
+          closeBranchDropdown();
+        }
+      }
+    });
+    document.getElementById("branch-dropdown-backdrop")?.addEventListener("click", closeBranchDropdown);
+    document.addEventListener("click", (e) => {
+      const wrap = document.getElementById("branch-selector-wrap");
+      if(wrap && !wrap.contains(e.target)){
+        closeBranchDropdown();
+      }
+    });
 
     paintTopbar();
     tickClock();
@@ -376,6 +589,10 @@ const App = (() => {
     Auth.restoreSession();
     Sync.init();
     Scanner.init();
+    // (2026-07-13) Subscribe to cloud branch updates; was single store
+    if(typeof RealtimeSync !== "undefined" && RealtimeSync.subscribeToBranches){
+      RealtimeSync.subscribeToBranches(() => paintTopbar());
+    }
     if(Auth.currentUser()) boot();
     else Auth.render();
   }

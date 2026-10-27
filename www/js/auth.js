@@ -17,8 +17,9 @@ const Auth = (() => {
     if(!force){
       const activeShift = (typeof Shift !== "undefined" && Shift.getActiveShift) ? Shift.getActiveShift() : (DB.getShift?.()?.status === "open" ? DB.getShift() : null);
       if(activeShift && activeShift.status === "open"){
+        // (2026-07-13) Guard logout only for shift cashier; was any admin
         const isSameCashier = session && session.name && activeShift.cashier && session.name.trim().toLowerCase() === activeShift.cashier.trim().toLowerCase();
-        if(isSameCashier || session?.role === "admin"){
+        if(isSameCashier){
           Modalz.alert({
             title: "Active Shift In Progress",
             message: "You must close your shift before logging out. Please close shift in Shift Management."

@@ -837,7 +837,10 @@ const POS = (() => {
       method, refCode, tendered, change: Utils.round2(tendered - t.grand),
       // (2026-07-13) Support all staff as cashier in sale; was cashier role only
       // (2026-07-13) Prioritize active user for cashier; was stale localStorage
-      cashier: modal.querySelector("#checkout-cashier-select")?.value || (Auth.currentUser()?.name) || localStorage.getItem("pos_cashier") || "Rosella"
+      cashier: modal.querySelector("#checkout-cashier-select")?.value || (Auth.currentUser()?.name) || localStorage.getItem("pos_cashier") || "Rosella",
+      // (2026-07-13) Multi-branch stamp on completed sale; was unbranchable
+      branchId: DB.getCurrentBranchId ? DB.getCurrentBranchId() : "branch_main",
+      branchName: DB.getCurrentBranch ? DB.getCurrentBranch()?.name : "Main Branch"
     };
     const sales = DB.getSales(); sales.unshift(sale); DB.setSales(sales);
     // (2026-07-13) Queue transaction for offline sync safety; was online check

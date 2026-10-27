@@ -465,6 +465,62 @@ const RealtimeSync = (() => {
     }
   }
 
+  // (2026-07-13) Multi-branch cloud sync and real-time subscription; was none
+  async function saveBranchToCloud(branch) {
+    if(!branch || !branch.id) return;
+    await init();
+    if(!realtimeDB) return;
+    try {
+      const bRef = realtimeMod.ref(realtimeDB, `branches/${String(branch.id).trim()}`);
+      await realtimeMod.set(bRef, {
+        ...branch,
+        updatedAt: branch.updatedAt || Date.now(),
+        deviceId: getDeviceId()
+      });
+      console.log("[RealtimeSync] Branch saved to cloud:", branch.id);
+    } catch(err) {
+      console.warn("Failed saving branch to cloud:", err);
+    }
+  }
+
+  async function deleteBranchFromCloud(branchId) {
+    if(!branchId) return;
+    await init();
+    if(!realtimeDB) return;
+    try {
+      const bRef = realtimeMod.ref(realtimeDB, `branches/${String(branchId).trim()}`);
+      await realtimeMod.remove(bRef);
+      console.log("[RealtimeSync] Branch removed from cloud:", branchId);
+    } catch(err) {
+      console.warn("Failed deleting branch from cloud:", err);
+    }
+  }
+
+  async function subscribeToBranches(callback) {
+    await init();
+    if(!realtimeDB || typeof DB === "undefined") return;
+    const branchesRef = realtimeMod.ref(realtimeDB, "branches");
+    realtimeMod.onValue(branchesRef, (snapshot) => {
+      const cloudBranches = snapshot.val();
+      if(!cloudBranches || typeof cloudBranches !== "object") return;
+      const curList = DB.getBranches();
+      const bMap = new Map();
+      curList.forEach(b => { if(b?.id) bMap.set(String(b.id), b); });
+      Object.values(cloudBranches).forEach(cb => {
+        if(!cb || !cb.id) return;
+        const bId = String(cb.id);
+        const existing = bMap.get(bId);
+        if(!existing || (cb.updatedAt || 0) >= (existing.updatedAt || 0)){
+          bMap.set(bId, { ...(existing || {}), ...cb });
+        }
+      });
+      const updated = Array.from(bMap.values());
+      DB.setBranches(updated);
+      if(callback) callback(updated);
+      if(typeof App !== "undefined" && App.paintTopbar) App.paintTopbar();
+    });
+  }
+
   // ==============================================================
   // RECEIPT NUMBER GENERATION - Atomic counter
   // ==============================================================
@@ -1320,6 +1376,10 @@ const RealtimeSync = (() => {
     getShiftLogsFromCloud,
     saveShiftLogToCloud,
     deleteShiftLogFromCloud,
+    // (2026-07-13) Export branch cloud sync methods; was unexported
+    saveBranchToCloud,
+    deleteBranchFromCloud,
+    subscribeToBranches,
     
     // POS
     getNextReceiptNumber,

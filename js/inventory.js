@@ -2209,8 +2209,10 @@ const Inventory = (() => {
   }
 
   function renderTable(){
-    const thead = document.getElementById("inv-thead");
+    // (2026-07-13) Guard renderTable when inventory DOM absent; was unguarded
     const tbody = document.getElementById("inv-tbody");
+    if(!tbody) return;
+    const thead = document.getElementById("inv-thead");
     const allItems = list();
     const totalPages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
     if(currentPage > totalPages) currentPage = totalPages;
@@ -2276,7 +2278,8 @@ const Inventory = (() => {
 
     // (2026-07-13) Always render header action buttons in renderTable. Prev: select-only
     renderHeaderActions();
-    document.getElementById("inv-count").innerHTML = `${allItems.length} item${allItems.length===1?"":"s"}${allItems.length > PAGE_SIZE ? ` · Pg ${currentPage}/${totalPages}` : ""}${selectMode ? ` · ${selectedIds.size} selected` : ""} · <strong style="color:var(--brand-deep);">${Utils.money(totalPotentialRev)}</strong> rev · <strong style="color:var(--success-deep);">${Utils.money(totalPotentialProfit)}</strong> profit`;
+    const invCountEl = document.getElementById("inv-count");
+    if(invCountEl) invCountEl.innerHTML = `${allItems.length} item${allItems.length===1?"":"s"}${allItems.length > PAGE_SIZE ? ` · Pg ${currentPage}/${totalPages}` : ""}${selectMode ? ` · ${selectedIds.size} selected` : ""} · <strong style="color:var(--brand-deep);">${Utils.money(totalPotentialRev)}</strong> rev · <strong style="color:var(--success-deep);">${Utils.money(totalPotentialProfit)}</strong> profit`;
     // (2026-10-15) Update h2 context label; was no filter context on h2
     const h2Ctx = document.getElementById("inv-h2-context");
     if(h2Ctx){

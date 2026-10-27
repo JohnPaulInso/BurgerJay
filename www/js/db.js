@@ -20,6 +20,8 @@ const DB = (() => {
     deletedProductIds: NS+"deletedProductIds",
     // (2026-07-13) Add deletedShiftLogIds tombstone; was unpersisted
     shiftLogs: NS+"shiftLogs", deletedShiftLogIds: NS+"deletedShiftLogIds", syncBaseline: NS+"syncBaseline",
+    // (2026-07-13) Multi-branch support keys; was single store
+    branches: NS+"branches", currentBranchId: NS+"currentBranchId",
     // (2026-07-13) Product trash bin; 30-day soft-delete before permanent removal
     trash: NS+"trash"
   };
@@ -38,8 +40,9 @@ const DB = (() => {
       invalidateCache();
       if(typeof App !== "undefined" && App.rerenderCurrentView) App.rerenderCurrentView();
       if(key === KEYS.products || !key){
-        if(typeof Inventory !== "undefined" && Inventory.renderTable) Inventory.renderTable();
-        if(typeof POS !== "undefined" && POS.renderCatalog) POS.renderCatalog();
+        // (2026-07-13) Guard remote render when modules mounted; was unguarded
+        if(typeof Inventory !== "undefined" && Inventory.renderTable && document.getElementById("inv-tbody")) Inventory.renderTable();
+        if(typeof POS !== "undefined" && POS.renderCatalog && document.getElementById("pos-catalog")) POS.renderCatalog();
       }
     };
     window.addEventListener("storage", (e) => onRemoteChange(e.key));
@@ -53,11 +56,18 @@ const DB = (() => {
   let cachedCategories = null;
   let isSyncRestoring = false;
 
+  // (2026-07-13) Parse JSON with fallback to raw string; was failing on unquoted
   function read(key, fallback = null){
     if(memCache.has(key)) return memCache.get(key);
     try{
       const raw = localStorage.getItem(key);
-      const val = raw ? JSON.parse(raw) : fallback;
+      if(raw === null || raw === undefined) return fallback;
+      let val;
+      try{
+        val = JSON.parse(raw);
+      }catch(_err){
+        val = raw;
+      }
       if(key !== KEYS.backups && key !== KEYS.syncBaseline){
         memCache.set(key, val);
       }
@@ -973,6 +983,88 @@ const DB = (() => {
   // (2026-07-13) Add current cart persistence methods; was in-memory only
   const getSavedCart   = () => read(KEYS.currentCart, { cart: [], discount: { type:"percent", value:0 } });
   const saveCart       = (v) => write(KEYS.currentCart, v);
+
+  // (2026-07-13) Multi-branch CRUD and scoping methods; was single-branch
+  const DEFAULT_BRANCHES = [
+    { id: "branch_main", name: "Main Branch", code: "MAIN", isDefault: true, createdAt: 1729000000000, updatedAt: 1729000000000 }
+  ];
+  const getBranches = () => {
+    const list = read(KEYS.branches, null);
+    if(!list || !Array.isArray(list) || !list.length){
+      write(KEYS.branches, DEFAULT_BRANCHES);
+      return DEFAULT_BRANCHES;
+    }
+    return list;
+  };
+  const setBranches = (list) => {
+    const arr = Array.isArray(list) && list.length ? list : DEFAULT_BRANCHES;
+    write(KEYS.branches, arr);
+    return arr;
+  };
+  // (2026-07-13) Store branch ID through write helper; was writing unquoted raw
+  const getCurrentBranchId = () => {
+    const val = read(KEYS.currentBranchId, null);
+    return (val && typeof val === "string") ? val : "branch_main";
+  };
+  const setCurrentBranchId = (id) => {
+    if(!id) return "branch_main";
+    const cleanId = String(id).trim();
+    write(KEYS.currentBranchId, cleanId);
+    return cleanId;
+  };
+  const getCurrentBranch = () => {
+    const branches = getBranches();
+    const curId = getCurrentBranchId();
+    return branches.find(b => String(b.id) === String(curId)) || branches[0] || DEFAULT_BRANCHES[0];
+  };
+  const saveBranch = (branchData) => {
+    if(!branchData || !branchData.name) return null;
+    const branches = [...getBranches()];
+    const now = Date.now();
+    let bId = branchData.id ? String(branchData.id).trim() : `branch_${now}`;
+    const idx = branches.findIndex(b => String(b.id) === bId);
+    const item = {
+      id: bId,
+      name: branchData.name.trim(),
+      code: (branchData.code || branchData.name.slice(0, 4).toUpperCase()).trim(),
+      address: (branchData.address || "").trim(),
+      isDefault: Boolean(branchData.isDefault || bId === "branch_main"),
+      status: "active",
+      createdAt: idx >= 0 ? (branches[idx].createdAt || now) : now,
+      updatedAt: now
+    };
+    if(idx >= 0){
+      branches[idx] = { ...branches[idx], ...item };
+    } else {
+      branches.push(item);
+    }
+    setBranches(branches);
+    if(typeof RealtimeSync !== "undefined" && RealtimeSync.saveBranchToCloud){
+      RealtimeSync.saveBranchToCloud(item).catch(err => console.warn(err));
+    }
+    return item;
+  };
+  const deleteBranch = (branchId) => {
+    if(!branchId || branchId === "branch_main") return false;
+    const branches = getBranches().filter(b => String(b.id) !== String(branchId));
+    setBranches(branches);
+    if(getCurrentBranchId() === branchId){
+      setCurrentBranchId("branch_main");
+    }
+    if(typeof RealtimeSync !== "undefined" && RealtimeSync.deleteBranchFromCloud){
+      RealtimeSync.deleteBranchFromCloud(branchId).catch(err => console.warn(err));
+    }
+    return true;
+  };
+  const getBranchSales = (bId) => {
+    const target = bId || getCurrentBranchId();
+    return getSales().filter(s => (s.branchId || "branch_main") === target);
+  };
+  const getBranchShiftLogs = (bId) => {
+    const target = bId || getCurrentBranchId();
+    return getShiftLogs().filter(l => (l.branchId || "branch_main") === target);
+  };
+
   // (2026-07-13) Add operating expenses and venue bookings DB stores; was none
   const getExpenses    = () => read(KEYS.expenses, []);
   const setExpenses    = (v) => write(KEYS.expenses, v);
@@ -1539,6 +1631,8 @@ const DB = (() => {
       deletedProductIds: Array.from(getDeletedProductIds ? getDeletedProductIds() : []),
       // (2026-07-13) Include deletedShiftLogIds in DB snapshot; was omitted
       deletedShiftLogIds: Array.from(getDeletedShiftLogIds ? getDeletedShiftLogIds() : []),
+      // (2026-07-13) Include branches and current branch in snapshot; was omitted
+      branches: getBranches(), currentBranchId: getCurrentBranchId(),
       exportedAt: Date.now(), version:3
     };
   }
@@ -1729,6 +1823,19 @@ const DB = (() => {
     }
     // (2026-07-13) Restore dayBalances from snapshot; was omitted
     if(snap.dayBalances) setDayBalances(snap.dayBalances);
+    // (2026-07-13) Ingest and merge branches from snapshot; was omitted
+    if(snap.branches && Array.isArray(snap.branches) && snap.branches.length){
+      const curBranches = getBranches();
+      const bMap = new Map();
+      curBranches.forEach(b => { if(b && b.id) bMap.set(String(b.id), b); });
+      snap.branches.forEach(b => {
+        if(!b || !b.id) return;
+        const bId = String(b.id);
+        const existing = bMap.get(bId);
+        bMap.set(bId, !existing || (b.updatedAt || 0) >= (existing.updatedAt || 0) ? { ...(existing || {}), ...b } : { ...b, ...existing });
+      });
+      setBranches(Array.from(bMap.values()));
+    }
     } finally {
       isSyncRestoring = false;
     }
@@ -1776,6 +1883,8 @@ const DB = (() => {
     getCustomItems, setCustomItems, saveCustomItem,
     // (2026-07-13) Export deduplicateSales for manual & auto dedupe; was omitted
     deduplicateSales,
+    // (2026-07-13) Export branch CRUD and scoping APIs; was omitted
+    getBranches, setBranches, getCurrentBranchId, setCurrentBranchId, getCurrentBranch, saveBranch, deleteBranch, getBranchSales, getBranchShiftLogs,
     // (2026-07-13) Export invalidateCache to clear in-memory state; was omitted
     snapshot, restoreSnapshot, wipeAll, invalidateCache
   };
