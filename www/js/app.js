@@ -170,6 +170,14 @@ const App = (() => {
     if(bNameEl && curBranch) bNameEl.textContent = curBranch.name;
   }
 
+  // (2026-07-13) Manage branch dropdown open state & topbar z-index; was menu-only
+  function closeBranchDropdown(){
+    document.getElementById("branch-dropdown-menu")?.classList.add("hidden");
+    document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
+    document.getElementById("branch-selector-wrap")?.classList.remove("open");
+    document.querySelector(".topbar")?.classList.remove("branch-open");
+  }
+
   // (2026-07-13) Topbar branch selector and management modals; was single store
   function paintBranchDropdown(){
     const menu = document.getElementById("branch-dropdown-menu");
@@ -212,8 +220,8 @@ const App = (() => {
         const bId = row.getAttribute("data-branch-select");
         if(bId && DB.setCurrentBranchId){
           DB.setCurrentBranchId(bId);
-          menu.classList.add("hidden");
-          document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
+          // (2026-07-13) Close branch menu & restore topbar state; was partial hidden
+          closeBranchDropdown();
           paintTopbar();
           const targetB = branches.find(b => String(b.id) === String(bId));
           Utils.toast(`Switched to ${targetB?.name || "branch"}.`, "success", 1200);
@@ -225,8 +233,7 @@ const App = (() => {
     if(isAdmin){
       menu.querySelector("#btn-add-branch-quick")?.addEventListener("click", (e) => {
         e.stopPropagation();
-        menu.classList.add("hidden");
-        document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
+        closeBranchDropdown();
         openAddBranchModal();
       });
 
@@ -236,8 +243,7 @@ const App = (() => {
           const bId = btn.getAttribute("data-branch-edit");
           const target = branches.find(b => String(b.id) === String(bId));
           if(target){
-            menu.classList.add("hidden");
-            document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
+            closeBranchDropdown();
             openEditBranchModal(target);
           }
         });
@@ -529,11 +535,7 @@ const App = (() => {
     };
     paintThemeIcon();
 
-    // (2026-07-13) Branch toggle with mobile backdrop support; was menu-only
-    const closeBranchDropdown = () => {
-      document.getElementById("branch-dropdown-menu")?.classList.add("hidden");
-      document.getElementById("branch-dropdown-backdrop")?.classList.add("hidden");
-    };
+    // (2026-07-13) Manage branch open state on click & backdrop; was menu-only
     document.getElementById("btn-branch-selector")?.addEventListener("click", (e) => {
       e.stopPropagation();
       const menu = document.getElementById("branch-dropdown-menu");
@@ -544,12 +546,17 @@ const App = (() => {
           paintBranchDropdown();
           menu.classList.remove("hidden");
           backdrop?.classList.remove("hidden");
+          document.getElementById("branch-selector-wrap")?.classList.add("open");
+          document.querySelector(".topbar")?.classList.add("branch-open");
         } else {
           closeBranchDropdown();
         }
       }
     });
-    document.getElementById("branch-dropdown-backdrop")?.addEventListener("click", closeBranchDropdown);
+    document.getElementById("branch-dropdown-backdrop")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeBranchDropdown();
+    });
     document.addEventListener("click", (e) => {
       const wrap = document.getElementById("branch-selector-wrap");
       if(wrap && !wrap.contains(e.target)){

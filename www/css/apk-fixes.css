@@ -599,8 +599,14 @@ html.scroll-locked .pos-cart, body.scroll-locked .pos-cart {
     overflow: visible !important;
     overflow-x: visible !important;
   }
-  /* (2026-07-13) Keep topbar behind backdrop & expanded cart; was z-index 200 */
+  /* (2026-07-13) Elevate topbar on branch menu open; was z-index 20 static */
   .topbar { z-index: 20 !important; }
+  .topbar.branch-open,
+  .topbar:has(#branch-dropdown-menu:not(.hidden)) {
+    z-index: 10050 !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
   body.modal-open .topbar,
   body.modal-openz .topbar,
   body.scroll-locked .topbar,
