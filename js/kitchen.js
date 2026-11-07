@@ -124,11 +124,11 @@ const Kitchen = (() => {
     return String(num).padStart(2, "0");
   }
 
+  // (2026-07-13) Format 2-digit Card # call code (#01-#99) for Dine-In & Take-Out; was T-/TO-
   function formatCallCode(order){
-    const isDineIn = (order?.orderType || "Dine-In") === "Dine-In";
     const rawNum = (order?.tableNumber && order.tableNumber !== "TO") ? order.tableNumber : (order?.orderNumber || "01");
     const twoDigit = formatTwoDigit(rawNum);
-    return isDineIn ? `T-${twoDigit}` : `TO-${twoDigit}`;
+    return `#${twoDigit}`;
   }
 
   // (2026-07-13) Keep kitchen orders blank by default for fresh database; was demo orders
@@ -244,7 +244,7 @@ const Kitchen = (() => {
           </div>
 
           <div style="font-size:0.88rem;font-weight:850;color:var(--ink);">
-            ${isDineIn ? `Dine-In · Table ${Utils.escapeHtml(order.tableNumber || '01')}` : `Take-Out Counter Order`}
+            ${isDineIn ? "Dine-In" : "Take-Out"} · Card #${Utils.escapeHtml(formatTwoDigit(order.tableNumber || order.orderNumber || "01"))}
           </div>
           <div style="font-size:0.8rem;font-weight:800;color:var(--brand-deep);margin-top:2px;">
             Order #${Utils.escapeHtml(String(order.orderNumber || order.id.slice(-4)))} · ${totalQty} Item(s) ${totalAmt > 0 ? `· ${Utils.money(totalAmt)}` : ""}
@@ -295,8 +295,7 @@ const Kitchen = (() => {
 
   function printKitchenSlip(order){
     const settings = DB.getSettings ? DB.getSettings() : {};
-    const isDineIn = (order.orderType || "Dine-In") === "Dine-In";
-    const callCode = isDineIn ? `TABLE ${order.tableNumber || "01"}` : `TAKE-OUT #${order.orderNumber || "01"}`;
+    const callCode = `CARD #${formatTwoDigit(order.tableNumber || order.orderNumber || "01")}`;
     let win = document.getElementById("receipt-print");
     if(!win){
       win = document.createElement("div");
@@ -535,7 +534,7 @@ const Kitchen = (() => {
             ${ready.length ? ready.map(o => `
               <div class="kds-mon-card mon-card-ready" data-action="completed" data-id="${o.id}" title="Tap to mark Served & Completed">
                 <div class="kds-mon-code">${Utils.escapeHtml(formatCallCode(o))}</div>
-                <div class="kds-mon-sub">${(o.orderType || "Dine-In") === "Dine-In" ? `Table ${formatTwoDigit(o.tableNumber)}` : "Counter Pickup"}</div>
+                <div class="kds-mon-sub">${(o.orderType || "Dine-In") === "Dine-In" ? "Dine-In" : "Take-Out"} · Card #${formatTwoDigit(o.tableNumber || o.orderNumber)}</div>
               </div>
             `).join("") : `
               <div class="kds-mon-empty">Waiting for ready orders…</div>

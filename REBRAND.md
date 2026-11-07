@@ -68,7 +68,7 @@ Replaced the previous Emerald Green / Royal Blue palette with the **BurgerJay Cr
    - **2-Digit Table & Take-Out Codes**: Enforced 2-digit formatting (`T-01` to `T-99` for Dine-In, `TO-01` to `TO-99` for Take-Out — never 3-digit `TO-003`).
    - **One-Tap Batch Check-Off (`TO COOK NOW` Bar)**: Tapping any batch card in the top `TO COOK NOW` bar automatically checks off all matching unplated items across all active orders at once, with a quick `Undo` toast button.
 3. **Four Core Burger Station Features**:
-   - **Quick Flavor & Add-On Picker at POS (`js/pos.js`)**: Tapping Fries or Burger Combos opens a 1-tap modifier popup for Fries Flavor (`Cheese Powder`, `BBQ Flavor`, `Sour Cream`, `Plain Salted`) and Burger Add-Ons (`Extra Cheese`, `Extra Patty`, `No Onions`, `Extra Crispy`, `No Mayo`, `Spicy`), sending the exact note to the KDS slip and allowing 1-tap editing inside the cart.
+   - **Quick Flavor, Drink & Add-On Picker at POS (`js/pos.js`, `js/inventory.js`)**: Tapping Fries, Drinks, or Burger Combos (`Combo 1` to `Combo 4` and `Add Combo Meal`) opens a 1-tap modifier popup for Fries Flavor (`Cheese`, `BBQ`, `Sour Cream`, `Plain Salted`), Drink Choice (`Iced Tea`, `Cucumber`, `Blue Lemonade`, `Coke`, `Sprite`, `Royal`, `Mountain Dew`, `Bottled Water` — with an inline `✎ Edit / Add Drinks` manager), and Burger/Drink Add-Ons (`Extra Cheese`, `Extra Patty`, `No Onions`, `Extra Crispy`, `No Mayo`, `Spicy`, `Less Ice`, `Extra Ice`). Also added inline `+ Add Custom Category` and Drink/Flavor Choices editors directly inside the Add/Edit Product modal.
    - **Active / Occupied Table Indicator at Checkout (`js/pos.js`)**: Dine-In checkout checks active KDS orders, marks occupied tables (`04•`) with an amber busy indicator, defaults to the first free table, and warns the cashier if an occupied table is selected.
    - **Raw Ingredient / Recipe (BOM) Stock Deduction (`js/pos.js`)**: When a sale is finalized, products with a `recipe` array automatically deduct their raw ingredients (buns, patties, cheese slices, fries portions, cups, plus flavor powders and extra add-ons) from inventory and log each deduction in the stock log.
    - **Customer Order Status Screen (`js/kitchen.js`, `css/kitchen.css`)**: Added a `Customer Screen` tab with a `Full Screen TV` mode showing a split-screen `Preparing` vs. `Now Serving / Ready to Pick Up` number monitor for waiting customers.
@@ -117,3 +117,18 @@ Verified 100% isolation between **BurgerJay** and **Route 98** across Git, Fireb
 | **BroadcastChannel** | `route98_pos_live_channel` | `burgerjay_pos_live_channel` |
 | **Live Server Port** | `5515` | `5516` |
 | **Default Staff & Cashiers** | Route98 Staff (`Rosella`, `Niño`, `Sharon`, `Ike`) | Only `Owner/Admin` (Route98 cashiers/staff stripped in getters/setters & sync) |
+
+---
+
+## 6. Register POS, Custom Categories & Drink Choice Enhancements (`js/pos.js`, `js/inventory.js`, `css/views.css`)
+
+1. **Taller Current Sale Card & Cleaner Product Cards**:
+   - Moved `#cat-chips` inside `.pos-catalog` so the right-hand `Current Sale` cart panel spans the full height of the catalog column.
+   - Removed the stock badge (`<span class="stock-tag">`) from Register POS product cards for a clean restaurant menu appearance.
+2. **Inline Custom Category Creation**:
+   - Added a `+ Add Custom Category` button directly inside the `Add / Edit Product` modal (`js/inventory.js`) so new categories (such as `DRINKS`) can be created on the fly.
+3. **Configurable Drink & Flavor Choices (Drinks & Combos 1–4)**:
+   - Added editable `Drink / Flavor Choices` (`choices` array on products) with one-tap presets (`Iced Tea`, `Cucumber`, `Blue Lemonade`, `Coke`, `Sprite`, `Royal`, `Mountain Dew`, `Bottled Water`) in `Add / Edit Product`.
+   - Pre-configured `Combo 1` through `Combo 4` and `Add Combo Meal (Fries & Drink)` with drink choices so cashiers are prompted to select the customer's drink alongside fries flavor and add-ons at checkout, forwarding all selections to the Kitchen Display System (KDS).
+4. **Unified 2-Digit Card # System for Dine-In & Take-Out**:
+   - Replaced `Table #` with a 2-digit `Card #` (`01`–`08` quick pills + `01`–`99` input with automatic leading-zero formatting) across Checkout (`js/pos.js`), printed receipts, and the Kitchen Display System (`js/kitchen.js`) so physical number cards can be handed out for both `Dine-In` and `Take-Out` orders.

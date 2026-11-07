@@ -574,17 +574,18 @@ const POS = (() => {
     const cashiers = allStaff.length ? allStaff : (DB.getCashiers ? DB.getCashiers() : ["Rosella", "Niño"]);
     const savedCashier = localStorage.getItem("pos_cashier") || cashiers[0] || "Rosella";
 
-    // (2026-07-13) Detect active Dine-In tables from KDS to highlight busy tables; was blind
+    // (2026-07-13) Use 2-digit Card # (01-08) for both Dine-In & Take-Out; was Table #
     const activeKdsOrders = (DB.getKitchenOrders ? DB.getKitchenOrders() : []).filter(
-      o => (o.orderType || "Dine-In") === "Dine-In" && (o.status === "new" || o.status === "cooking" || o.status === "ready")
+      o => o.status === "new" || o.status === "cooking" || o.status === "ready"
     );
     const occupiedMap = new Map();
     activeKdsOrders.forEach(o => {
       const n = parseInt(String(o.tableNumber || "").replace(/\D/g, ""), 10);
       if(n > 0) occupiedMap.set(n, (occupiedMap.get(n) || 0) + 1);
     });
-    const tableRange = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const tableRange = [1, 2, 3, 4, 5, 6, 7, 8];
     const firstFreeTable = tableRange.find(num => !occupiedMap.has(num)) || 1;
+    const firstFreeStr = String(firstFreeTable).padStart(2, "0");
 
     // (2026-07-13) Polish checkout modal structure & presets; was crowded layout
     const body = `
@@ -600,23 +601,23 @@ const POS = (() => {
         </div>
         <div class="checkout-due-val">${Utils.money(t.grand)}</div>
       </div>
-      <!-- (2026-07-13) Add Dine-In/Take-Out order type and occupied table indicators; was plain -->
+      <!-- (2026-07-13) Use Card # for both Dine-In & Take-Out orders; was Dine-In Table # -->
       <div class="field" style="margin-bottom:12px;background:var(--paper-dim);padding:10px 12px;border-radius:10px;border:1px solid var(--line);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
           <label style="font-size:.78rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);margin:0;">Order Type</label>
           <div class="order-type-chips" id="order-type-chips" style="display:flex;gap:6px;">
-            <button type="button" class="btn btn-xs btn-primary font-bold order-type-btn active" data-type="Dine-In" style="border-radius:6px;padding:3px 12px;">Dine-In</button>
-            <button type="button" class="btn btn-xs btn-outline font-bold order-type-btn" data-type="Take-Out" style="border-radius:6px;padding:3px 12px;">Take-Out</button>
+            <button type="button" class="btn btn-xs btn-primary font-bold order-type-btn active" data-type="Dine-In" style="border-radius:6px;padding:4px 14px;">Dine-In</button>
+            <button type="button" class="btn btn-xs btn-outline font-bold order-type-btn" data-type="Take-Out" style="border-radius:6px;padding:4px 14px;">Take-Out</button>
           </div>
         </div>
-        <div id="table-number-wrap" style="display:flex;align-items:center;gap:10px;">
-          <label for="table-number-input" id="table-num-label" style="font-size:.78rem;font-weight:800;text-transform:uppercase;color:var(--ink-soft);white-space:nowrap;margin:0;">Table #</label>
-          <input class="input mono font-bold" id="table-number-input" type="number" min="1" max="99" value="${firstFreeTable}" placeholder="e.g. 5" style="width:70px;text-align:center;font-size:1.15rem;height:36px;border-radius:8px;padding:4px;" maxlength="2">
-          <div class="table-quick-pills" id="table-quick-pills" style="display:flex;gap:4px;overflow-x:auto;padding-bottom:2px;flex:1;">
+        <div id="table-number-wrap" style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+          <label for="table-number-input" id="table-num-label" style="font-size:.78rem;font-weight:800;text-transform:uppercase;color:var(--ink-soft);white-space:nowrap;margin:0;">Card #</label>
+          <input class="input mono font-bold" id="table-number-input" type="text" inputmode="numeric" value="${firstFreeStr}" placeholder="01" style="width:54px;text-align:center;font-size:1.05rem;height:34px;border-radius:8px;padding:2px 4px;" maxlength="2">
+          <div class="table-quick-pills" id="table-quick-pills" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;flex:1;">
             ${tableRange.map(num => {
+              const pad = String(num).padStart(2, "0");
               const isBusy = occupiedMap.has(num);
-              const isSelected = num === firstFreeTable;
-              return `<button type="button" class="btn btn-xs table-pill-btn ${isSelected ? 'btn-primary' : 'btn-ghost'}" data-num="${num}" title="${isBusy ? `Table ${String(num).padStart(2,'0')} currently has an active order` : `Table ${String(num).padStart(2,'0')} (Available)`}" style="padding:3px 8px;font-size:0.74rem;border:1.5px solid ${isBusy ? '#F59E0B' : 'var(--line)'};background:${isSelected ? 'var(--brand)' : (isBusy ? '#FFFBEB' : '')};color:${isSelected ? '#fff' : (isBusy ? '#B45309' : '')};border-radius:6px;min-width:34px;font-weight:800;">${String(num).padStart(2,'0')}${isBusy ? '•' : ''}</button>`;
+              return `<button type="button" class="btn btn-xs table-pill-btn" data-num="${pad}" title="${isBusy ? `Card #${pad} (In Use)` : `Card #${pad}`}" style="padding:4px 0;font-size:0.76rem;border-radius:6px;font-weight:800;text-align:center;">${pad}</button>`;
             }).join("")}
           </div>
         </div>
@@ -661,28 +662,54 @@ const POS = (() => {
     let orderType = "Dine-In";
     modal.dataset.orderType = orderType;
     const tableInput = modal.querySelector("#table-number-input");
-    const tableLabel = modal.querySelector("#table-num-label");
     const tableHint = modal.querySelector("#table-occupied-hint");
-    // (2026-07-13) Highlight selected table pill & warn if table has active order; was static
+    // (2026-07-13) Keep Card # 2-digit zero-padded for Dine-In & Take-Out; was Dine-In only
     const updateTableOccupancyUI = () => {
-      const n = parseInt(tableInput?.value || "0", 10);
+      const n = parseInt(String(tableInput?.value || "0").replace(/\D/g, ""), 10) || 0;
       modal.querySelectorAll(".table-pill-btn").forEach(b => {
-        const bNum = Number(b.dataset.num);
+        const bNum = parseInt(b.dataset.num, 10);
         const isBusy = occupiedMap.has(bNum);
-        const isSel = bNum === n && orderType === "Dine-In";
-        b.style.background = isSel ? "var(--brand)" : (isBusy ? "#FFFBEB" : "");
-        b.style.color = isSel ? "#fff" : (isBusy ? "#B45309" : "");
+        const isSel = bNum === n;
+        b.style.background = isSel ? "var(--brand)" : (isBusy ? "#FFFBEB" : "var(--paper)");
+        b.style.color = isSel ? "#fff" : (isBusy ? "#B45309" : "var(--ink)");
+        b.style.border = `1.5px solid ${isSel ? "var(--brand)" : (isBusy ? "#F59E0B" : "var(--line)")}`;
       });
       if(tableHint){
-        if(orderType === "Dine-In" && occupiedMap.has(n)){
+        if(occupiedMap.has(n)){
           tableHint.style.display = "block";
-          tableHint.textContent = `⚠ Table T-${String(n).padStart(2, "0")} currently has an active order in the kitchen.`;
+          tableHint.textContent = `⚠ Card #${String(n).padStart(2, "0")} currently has an active order in the kitchen.`;
         } else {
           tableHint.style.display = "none";
         }
       }
     };
-    tableInput?.addEventListener("input", updateTableOccupancyUI);
+    let lastTableDigitTs = 0;
+    tableInput?.addEventListener("focus", () => tableInput.select());
+    tableInput?.addEventListener("keydown", (e) => {
+      if(/^[0-9]$/.test(e.key)){
+        e.preventDefault();
+        const now = Date.now();
+        const prevNum = parseInt(String(tableInput.value || "0").replace(/\D/g, ""), 10) || 0;
+        const nextNum = (now - lastTableDigitTs < 900 && prevNum > 0 && prevNum < 10)
+          ? (prevNum * 10 + Number(e.key))
+          : Number(e.key);
+        lastTableDigitTs = now;
+        const clamped = Math.max(1, Math.min(99, nextNum || 1));
+        tableInput.value = String(clamped).padStart(2, "0");
+        updateTableOccupancyUI();
+      }
+    });
+    tableInput?.addEventListener("input", () => {
+      const digits = String(tableInput.value || "").replace(/\D/g, "").slice(-2);
+      const n = parseInt(digits, 10);
+      tableInput.value = n > 0 ? String(n).padStart(2, "0") : "";
+      updateTableOccupancyUI();
+    });
+    tableInput?.addEventListener("blur", () => {
+      const n = parseInt(String(tableInput.value || "").replace(/\D/g, ""), 10) || firstFreeTable;
+      tableInput.value = String(Math.max(1, Math.min(99, n))).padStart(2, "0");
+      updateTableOccupancyUI();
+    });
     modal.querySelector("#order-type-chips")?.addEventListener("click", (e) => {
       const btn = e.target.closest(".order-type-btn");
       if(!btn) return;
@@ -694,19 +721,13 @@ const POS = (() => {
       btn.classList.remove("btn-outline");
       orderType = btn.dataset.type;
       modal.dataset.orderType = orderType;
-      if(orderType === "Take-Out"){
-        if(tableLabel) tableLabel.textContent = "Buzzer #";
-        if(tableInput) { tableInput.value = ""; tableInput.placeholder = "Auto"; }
-      } else {
-        if(tableLabel) tableLabel.textContent = "Table #";
-        if(tableInput) { tableInput.value = firstFreeTable; tableInput.placeholder = "e.g. 5"; }
-      }
+      if(tableInput && !tableInput.value) tableInput.value = firstFreeStr;
       updateTableOccupancyUI();
     });
     modal.querySelector("#table-quick-pills")?.addEventListener("click", (e) => {
       const pill = e.target.closest(".table-pill-btn");
       if(pill && tableInput){
-        tableInput.value = pill.dataset.num;
+        tableInput.value = String(parseInt(pill.dataset.num, 10) || 1).padStart(2, "0");
         updateTableOccupancyUI();
       }
     });
@@ -804,8 +825,8 @@ const POS = (() => {
           ${settings.tin ? `TIN: ${Utils.escapeHtml(settings.tin)}<br>` : ""}
         </div>
         <hr>
-        <!-- (2026-07-13) Print table number and order type on receipt; was missing -->
-        ${sale.tableNumber ? `<div class="row" style="font-weight:800;font-size:1.05em;"><span>${sale.orderType || 'Order'}:</span><span>Table ${Utils.escapeHtml(sale.tableNumber)}</span></div>` : ""}
+        <!-- (2026-07-13) Print Card # and order type on receipt; was Table # -->
+        ${sale.tableNumber ? `<div class="row" style="font-weight:800;font-size:1.05em;"><span>${sale.orderType || 'Order'}:</span><span>Card #${Utils.escapeHtml(sale.tableNumber)}</span></div>` : ""}
         <div class="row"><span>${Utils.fmtDate(sale.ts)}</span><span>${txnId}</span></div>
         <div class="row"><span>Cashier: ${Utils.escapeHtml(sale.cashier || "Cashier")}</span><span>${sale.method}</span></div>
         ${sale.refCode ? `<div class="row"><span>Ref #:</span><span class="mono">${Utils.escapeHtml(sale.refCode)}</span></div>` : ""}
@@ -1092,12 +1113,12 @@ const POS = (() => {
       printReceipt(sale);
     }
 
-    // (2026-07-13) Render 2-digit call code on sale completion; was 3-digit slice(-3)
+    // (2026-07-13) Render 2-digit Card # on sale completion for Dine-In & Take-Out; was T-/TO-
     const branchLabel = (sale.branchName || (DB.getCurrentBranch && DB.getCurrentBranch()?.name) || "Main Branch").toUpperCase();
     const isDineIn = (sale.orderType || "Dine-In") === "Dine-In";
     const rawNum = (sale.tableNumber && sale.tableNumber !== "TO") ? sale.tableNumber : (sale.receiptNo || cleanId || "01");
     const twoDigit = String(parseInt(String(rawNum).replace(/\D/g, "").slice(-2), 10) || 1).padStart(2, "0");
-    const callCode = isDineIn ? `T-${twoDigit}` : `TO-${twoDigit}`;
+    const callCode = `#${twoDigit}`;
     const totalUnits = (sale.items || []).reduce((s, i) => s + Number(i.qty || 1), 0);
 
     const body = `
@@ -1116,7 +1137,7 @@ const POS = (() => {
           </div>
 
           <div style="font-size:0.9rem;font-weight:850;color:var(--ink);">
-            ${isDineIn ? `Dine-In · Table ${Utils.escapeHtml(sale.tableNumber || '01')}` : `Take-Out Order`} · ${Utils.money(sale.total)}
+            ${isDineIn ? "Dine-In" : "Take-Out"} · Card #${Utils.escapeHtml(twoDigit)} · ${Utils.money(sale.total)}
           </div>
 
           <div class="kds-tear-line" style="margin:8px -16px;">
@@ -1161,12 +1182,12 @@ const POS = (() => {
 
   function finalizeSale(modal){
     const t = totals();
-    /* (2026-07-13) Validate table number for Dine-In order type; was unvalidated */
+    /* (2026-07-13) Validate Card # for both Dine-In and Take-Out; was Dine-In only */
     const orderType = modal.dataset.orderType || "Dine-In";
     const tableInputVal = (modal.querySelector("#table-number-input")?.value || "").trim();
-    if(orderType === "Dine-In" && (!tableInputVal || tableInputVal === "0")){
+    if(!tableInputVal || tableInputVal === "0" || tableInputVal === "00"){
       Utils.Sound.error();
-      Utils.toast("Please enter a Table Number (1-99) for Dine-In.", "error");
+      Utils.toast("Please enter a Card Number (01-99).", "error");
       modal.querySelector("#table-number-input")?.focus();
       return;
     }

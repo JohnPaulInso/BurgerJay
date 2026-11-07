@@ -385,6 +385,340 @@ const DB = (() => {
     return false;
   }
 
+  // (2026-07-13) Seed realistic 7-day BurgerJay sales, OPEX, shifts & KDS orders for demo; was blank
+  function ensureBurgerJayDemoDataSeeded(){
+    const demoFlagKey = NS + "demo_week_seeded_v2";
+    const existingSales = read(KEYS.sales, []) || [];
+    const existingKds = read(KEYS.kitchenOrders, []) || [];
+    if(localStorage.getItem(demoFlagKey) && existingSales.length > 0 && existingKds.length > 0){
+      return false;
+    }
+    const prods = getProducts();
+    const findProd = (id, fallbackName) => prods.find(p => p && (p.id === id || p.name === fallbackName)) || (typeof CATALOG_SEED !== "undefined" ? CATALOG_SEED.products.find(p => p.id === id) : null);
+
+    const pClassic   = findProd("BJ-BRG-001", "ChixBurg Classic") || { id:"BJ-BRG-001", name:"ChixBurg Classic", category:"BURGERS", price:79, cost:39.5, unit:"pc", imageUrl:"" };
+    const pCheezo    = findProd("BJ-BRG-002", "ChixBurg Cheezo") || { id:"BJ-BRG-002", name:"ChixBurg Cheezo", category:"BURGERS", price:89, cost:44.5, unit:"pc", imageUrl:"" };
+    const pFresno    = findProd("BJ-BRG-003", "ChixBurg Fresno") || { id:"BJ-BRG-003", name:"ChixBurg Fresno", category:"BURGERS", price:99, cost:49.5, unit:"pc", imageUrl:"" };
+    const pHawaiian  = findProd("BJ-BRG-004", "Hawaiian Blast!") || { id:"BJ-BRG-004", name:"Hawaiian Blast!", category:"BURGERS", price:130, cost:65, unit:"pc", imageUrl:"assets/Hawaiian Blast.png" };
+    const pEggChamp  = findProd("BJ-BRG-005", "Egg Champ") || { id:"BJ-BRG-005", name:"Egg Champ", category:"BURGERS", price:130, cost:65, unit:"pc", imageUrl:"assets/Egg Champ.png" };
+    const pBacon     = findProd("BJ-BRG-006", "Baconarian") || { id:"BJ-BRG-006", name:"Baconarian", category:"BURGERS", price:150, cost:75, unit:"pc", imageUrl:"assets/Baconarian.png" };
+    const pTwin      = findProd("BJ-BRG-007", "Twin Pounder") || { id:"BJ-BRG-007", name:"Twin Pounder", category:"BURGERS", price:170, cost:85, unit:"pc", imageUrl:"assets/Twin Pounder.png" };
+    const pMagnum    = findProd("BJ-BRG-008", "Magnum Slam!") || { id:"BJ-BRG-008", name:"Magnum Slam!", category:"BURGERS", price:200, cost:100, unit:"pc", imageUrl:"assets/Magnum Slam.png" };
+    const pTriple    = findProd("BJ-BRG-009", "Triple Decker") || { id:"BJ-BRG-009", name:"Triple Decker", category:"BURGERS", price:230, cost:115, unit:"pc", imageUrl:"assets/Triple Decker.png" };
+    const pCheezdog  = findProd("BJ-HDG-001", "Cheezdog") || { id:"BJ-HDG-001", name:"Cheezdog", category:"HOTDOGS", price:80, cost:40, unit:"pc", imageUrl:"assets/Cheezdog.png" };
+    const pFries     = findProd("BJ-FRS-001", "Fries") || { id:"BJ-FRS-001", name:"Fries", category:"FRIES", price:50, cost:25, unit:"order", imageUrl:"assets/Fries.png" };
+    const pBaconFry  = findProd("BJ-FRS-002", "Bacon with Fries") || { id:"BJ-FRS-002", name:"Bacon with Fries", category:"FRIES", price:150, cost:75, unit:"order", imageUrl:"assets/Bacon with Fries.png" };
+    const pAddCombo  = findProd("BJ-ADD-001", "Add Combo Meal (Fries & Drink)") || { id:"BJ-ADD-001", name:"Add Combo Meal (Fries & Drink)", category:"ADD-ONS", price:70, cost:35, unit:"set", imageUrl:"" };
+    const pCombo1    = findProd("BJ-CMB-001", "Combo 1 (Cheezdog + Fries & Drink)") || { id:"BJ-CMB-001", name:"Combo 1 (Cheezdog + Fries & Drink)", category:"COMBOS", price:100, cost:50, unit:"combo", imageUrl:"assets/Combo1.png" };
+    const pCombo2    = findProd("BJ-CMB-002", "Combo 2 (Meat Burger + Fries & Drink)") || { id:"BJ-CMB-002", name:"Combo 2 (Meat Burger + Fries & Drink)", category:"COMBOS", price:130, cost:65, unit:"combo", imageUrl:"assets/Combo2.png" };
+    const pCombo3    = findProd("BJ-CMB-003", "Combo 3 (Egg Champ + Fries & Drink)") || { id:"BJ-CMB-003", name:"Combo 3 (Egg Champ + Fries & Drink)", category:"COMBOS", price:170, cost:85, unit:"combo", imageUrl:"assets/Combo3.png" };
+    const pCombo4    = findProd("BJ-CMB-004", "Combo 4 (Twin Pounder + Fries & Drink)") || { id:"BJ-CMB-004", name:"Combo 4 (Twin Pounder + Fries & Drink)", category:"COMBOS", price:220, cost:110, unit:"combo", imageUrl:"assets/Combo4.png" };
+
+    const makeLine = (p, qty, notes = "") => ({
+      productId: p.id,
+      name: notes ? `${p.name} (${notes})` : p.name,
+      price: Number(p.price),
+      cost: Number(p.cost),
+      qty: Number(qty),
+      unit: p.unit || "pc",
+      unitType: "piece",
+      category: p.category || "BURGERS",
+      imageUrl: p.imageUrl || "",
+      notes
+    });
+
+    const basketTemplates = [
+      [makeLine(pCombo4, 2, "Iced Tea, Cheese"), makeLine(pBaconFry, 1, "Cheese")],
+      [makeLine(pCombo2, 2, "Coke, BBQ"), makeLine(pCheezdog, 1)],
+      [makeLine(pMagnum, 1, "Extra Cheese"), makeLine(pAddCombo, 1, "Blue Lemonade, Sour Cream"), makeLine(pCombo1, 1, "Sprite, Cheese")],
+      [makeLine(pTriple, 1), makeLine(pCombo3, 1, "Cucumber, Cheese")],
+      [makeLine(pBacon, 2), makeLine(pFries, 2, "Cheese")],
+      [makeLine(pHawaiian, 2), makeLine(pAddCombo, 2, "Iced Tea, BBQ")],
+      [makeLine(pCombo3, 2, "Blue Lemonade, Cheese"), makeLine(pCheezo, 1)],
+      [makeLine(pTwin, 1), makeLine(pEggChamp, 1), makeLine(pBaconFry, 1, "Sour Cream")],
+      [makeLine(pCombo1, 3, "Iced Tea, Cheese")],
+      [makeLine(pFresno, 2), makeLine(pClassic, 1), makeLine(pFries, 2, "BBQ")],
+      [makeLine(pCombo4, 1, "Coke, Sour Cream"), makeLine(pCombo2, 1, "Sprite, Cheese")],
+      [makeLine(pMagnum, 2), makeLine(pBaconFry, 1, "Cheese"), makeLine(pAddCombo, 2, "Cucumber, BBQ")]
+    ];
+
+    const now = Date.now();
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const demoSales = [];
+    const demoShiftLogs = [];
+    let txnCounter = 1;
+
+    // Generate realistic orders across the past 7 days (6 days ago -> today)
+    const dailyOrderCounts = [11, 10, 12, 11, 13, 14, 9]; // 80 orders total across 7 days
+    for(let daysAgo = 6; daysAgo >= 0; daysAgo--){
+      const dayDate = new Date(todayStart.getTime() - daysAgo * 86400000);
+      const countForDay = dailyOrderCounts[6 - daysAgo] || 11;
+      let dayCashTotal = 0;
+      let dayGCashTotal = 0;
+      let dayCardTotal = 0;
+
+      for(let i = 0; i < countForDay; i++){
+        // Spread orders between 10:30 AM and 8:45 PM, but for today keep timestamps before `now`
+        const baseMinutes = 10 * 60 + 30 + i * 42 + ((daysAgo * 7 + i * 13) % 19);
+        let orderTs = dayDate.getTime() + baseMinutes * 60000;
+        if(daysAgo === 0 && orderTs > now - 120000){
+          orderTs = now - (countForDay - i) * 14 * 60000;
+        }
+
+        const tpl = basketTemplates[(daysAgo * 5 + i) % basketTemplates.length];
+        const items = tpl.map(it => ({ ...it }));
+        const subtotal = Utils.round2(items.reduce((s, l) => s + l.price * l.qty, 0));
+        const vat = Utils.round2(subtotal - (subtotal / 1.12));
+        const grand = subtotal;
+
+        const methodRoll = (daysAgo + i) % 10;
+        const method = methodRoll < 7 ? "Cash" : (methodRoll < 9 ? "GCash" : "Card");
+        const tendered = method === "Cash" ? (Math.ceil(grand / 100) * 100) : grand;
+        const change = Utils.round2(tendered - grand);
+        const refCode = method === "Cash" ? "" : `REF-${839201 + txnCounter * 17}`;
+
+        if(method === "Cash") dayCashTotal = Utils.round2(dayCashTotal + grand);
+        else if(method === "GCash") dayGCashTotal = Utils.round2(dayGCashTotal + grand);
+        else dayCardTotal = Utils.round2(dayCardTotal + grand);
+
+        const cardNum = String(((i + daysAgo) % 8) + 1).padStart(2, "0");
+        const orderType = (i % 3 === 0) ? "Take-Out" : "Dine-In";
+        const receiptStr = String(txnCounter).padStart(4, "0");
+
+        demoSales.push({
+          id: `TXN-${receiptStr}`,
+          receiptNo: receiptStr,
+          ts: orderTs,
+          items,
+          subtotal,
+          discountType: "percent",
+          discountValue: 0,
+          discountAmt: 0,
+          vat,
+          total: grand,
+          method,
+          refCode,
+          tendered,
+          change,
+          cashier: "Owner/Admin",
+          tableNumber: cardNum,
+          orderType,
+          branchId: "branch_main",
+          branchName: "Main Branch"
+        });
+        txnCounter++;
+      }
+
+      // Create closed shift logs for the previous 6 days
+      if(daysAgo > 0){
+        const openTs = dayDate.getTime() + 9 * 3600000 + 30 * 60000; // 9:30 AM
+        const closeTs = dayDate.getTime() + 21 * 3600000 + 30 * 60000; // 9:30 PM
+        const openingCash = 3000;
+        const expectedCash = Utils.round2(openingCash + dayCashTotal);
+        demoShiftLogs.push({
+          id: `shift_demo_d${daysAgo}`,
+          openedAt: openTs,
+          closedAt: closeTs,
+          updatedAt: closeTs,
+          openedBy: "Owner/Admin",
+          closedBy: "Owner/Admin",
+          openingCash,
+          expectedCash,
+          actualCash: expectedCash,
+          variance: 0,
+          cashSales: dayCashTotal,
+          gcashSales: dayGCashTotal,
+          cardSales: dayCardTotal,
+          totalSales: Utils.round2(dayCashTotal + dayGCashTotal + dayCardTotal),
+          txCount: countForDay,
+          branchId: "branch_main",
+          branchName: "Main Branch"
+        });
+      }
+    }
+
+    demoSales.sort((a, b) => b.ts - a.ts);
+    demoShiftLogs.sort((a, b) => b.openedAt - a.openedAt);
+
+    // Seed realistic past-week operating expenses (OPEX)
+    const fmtDateLocal = (ms) => new Date(ms).toLocaleDateString("en-CA");
+    const demoExpenses = [
+      {
+        id: "exp_demo_1",
+        date: fmtDateLocal(now - 5 * 86400000),
+        ts: now - 5 * 86400000,
+        category: "Ingredients & Produce",
+        description: "Fresh lettuce, tomatoes, white onions & burger buns delivery",
+        amount: 1250,
+        method: "Cash",
+        recipient: "Bogo Public Market Produce",
+        refNo: "OR-4412",
+        loggedBy: "Owner/Admin"
+      },
+      {
+        id: "exp_demo_2",
+        date: fmtDateLocal(now - 4 * 86400000),
+        ts: now - 4 * 86400000,
+        category: "Utilities",
+        description: "Commercial LPG tank refill for burger grill & deep fryer",
+        amount: 1100,
+        method: "Cash",
+        recipient: "PryceGas Bogo",
+        refNo: "SI-8820",
+        loggedBy: "Owner/Admin"
+      },
+      {
+        id: "exp_demo_3",
+        date: fmtDateLocal(now - 3 * 86400000),
+        ts: now - 3 * 86400000,
+        category: "Packaging & Supplies",
+        description: "Burger wrappers, clam boxes, paper bags & 16oz drink cups",
+        amount: 850,
+        method: "GCash",
+        recipient: "Cebu FoodPack Supplies",
+        refNo: "GC-992831",
+        loggedBy: "Owner/Admin"
+      },
+      {
+        id: "exp_demo_4",
+        date: fmtDateLocal(now - 2 * 86400000),
+        ts: now - 2 * 86400000,
+        category: "Ingredients & Produce",
+        description: "Palm frying oil (17L) & cheese/BBQ/sour cream seasoning packs",
+        amount: 980,
+        method: "Cash",
+        recipient: "Metro Wholesale Bogo",
+        refNo: "OR-5519",
+        loggedBy: "Owner/Admin"
+      },
+      {
+        id: "exp_demo_5",
+        date: fmtDateLocal(now - 1 * 86400000),
+        ts: now - 1 * 86400000,
+        category: "Supplies",
+        description: "Tube ice sacks, tissues, hand soap & kitchen sanitizer",
+        amount: 420,
+        method: "Cash",
+        recipient: "Dakit Ice & Mart",
+        refNo: "OR-6014",
+        loggedBy: "Owner/Admin"
+      }
+    ];
+
+    // Seed 6 live Kitchen Display System (KDS) orders for today's demo
+    const demoKitchenOrders = [
+      {
+        id: "kds_demo_01",
+        saleId: "TXN-0080",
+        orderNumber: "80",
+        tableNumber: "01",
+        orderType: "Dine-In",
+        cashier: "Owner/Admin",
+        status: "new",
+        timestamp: now - 2 * 60000,
+        items: [
+          { name: pCombo4.name, qty: 2, price: pCombo4.price, notes: "Iced Tea, Cheese", imageUrl: pCombo4.imageUrl, category: pCombo4.category, done: false },
+          { name: pBaconFry.name, qty: 1, price: pBaconFry.price, notes: "Cheese", imageUrl: pBaconFry.imageUrl, category: pBaconFry.category, done: false }
+        ]
+      },
+      {
+        id: "kds_demo_02",
+        saleId: "TXN-0079",
+        orderNumber: "79",
+        tableNumber: "02",
+        orderType: "Take-Out",
+        cashier: "Owner/Admin",
+        status: "new",
+        timestamp: now - 3 * 60000,
+        items: [
+          { name: pMagnum.name, qty: 1, price: pMagnum.price, notes: "Extra Cheese", imageUrl: pMagnum.imageUrl, category: pMagnum.category, done: false },
+          { name: pCombo1.name, qty: 2, price: pCombo1.price, notes: "Blue Lemonade, BBQ", imageUrl: pCombo1.imageUrl, category: pCombo1.category, done: false }
+        ]
+      },
+      {
+        id: "kds_demo_03",
+        saleId: "TXN-0078",
+        orderNumber: "78",
+        tableNumber: "03",
+        orderType: "Dine-In",
+        cashier: "Owner/Admin",
+        status: "cooking",
+        timestamp: now - 5 * 60000,
+        items: [
+          { name: pTriple.name, qty: 1, price: pTriple.price, notes: "", imageUrl: pTriple.imageUrl, category: pTriple.category, done: false },
+          { name: pCombo3.name, qty: 2, price: pCombo3.price, notes: "Coke, Sour Cream", imageUrl: pCombo3.imageUrl, category: pCombo3.category, done: true }
+        ]
+      },
+      {
+        id: "kds_demo_04",
+        saleId: "TXN-0077",
+        orderNumber: "77",
+        tableNumber: "04",
+        orderType: "Dine-In",
+        cashier: "Owner/Admin",
+        status: "cooking",
+        timestamp: now - 7 * 60000,
+        items: [
+          { name: pBacon.name, qty: 2, price: pBacon.price, notes: "", imageUrl: pBacon.imageUrl, category: pBacon.category, done: false },
+          { name: pFries.name, qty: 2, price: pFries.price, notes: "Cheese", imageUrl: pFries.imageUrl, category: pFries.category, done: true }
+        ]
+      },
+      {
+        id: "kds_demo_05",
+        saleId: "TXN-0076",
+        orderNumber: "76",
+        tableNumber: "05",
+        orderType: "Take-Out",
+        cashier: "Owner/Admin",
+        status: "ready",
+        timestamp: now - 9 * 60000,
+        items: [
+          { name: pCombo2.name, qty: 2, price: pCombo2.price, notes: "Cucumber, Cheese", imageUrl: pCombo2.imageUrl, category: pCombo2.category, done: true },
+          { name: pCheezdog.name, qty: 1, price: pCheezdog.price, notes: "", imageUrl: pCheezdog.imageUrl, category: pCheezdog.category, done: true }
+        ]
+      },
+      {
+        id: "kds_demo_06",
+        saleId: "TXN-0075",
+        orderNumber: "75",
+        tableNumber: "06",
+        orderType: "Dine-In",
+        cashier: "Owner/Admin",
+        status: "completed",
+        timestamp: now - 16 * 60000,
+        completedAt: now - 6 * 60000,
+        items: [
+          { name: pHawaiian.name, qty: 1, price: pHawaiian.price, notes: "", imageUrl: pHawaiian.imageUrl, category: pHawaiian.category, done: true },
+          { name: pCheezo.name, qty: 1, price: pCheezo.price, notes: "", imageUrl: pCheezo.imageUrl, category: pCheezo.category, done: true },
+          { name: pAddCombo.name, qty: 1, price: pAddCombo.price, notes: "Sprite, BBQ", imageUrl: pAddCombo.imageUrl, category: pAddCombo.category, done: true }
+        ]
+      }
+    ];
+
+    write(KEYS.deletedSaleIds, []);
+    write(KEYS.sales, demoSales);
+    write(KEYS.expenses, demoExpenses);
+    write(KEYS.kitchenOrders, demoKitchenOrders);
+    write(KEYS.shiftLogs, demoShiftLogs);
+    write(KEYS.shift, {
+      id: "shift_demo_today",
+      status: "open",
+      openedAt: todayStart.getTime() + 9 * 3600000,
+      updatedAt: now,
+      openedBy: "Owner/Admin",
+      openingCash: 3000,
+      cashIn: 0,
+      cashOut: 0,
+      branchId: "branch_main",
+      branchName: "Main Branch"
+    });
+
+    try{ localStorage.setItem(demoFlagKey, "true"); }catch(e){}
+    return true;
+  }
+
   function init(){
     // (2026-07-13) One-time blank slate reset for non-menu sales/orders; was wiping catalog
     const blankFlagKey = NS + "blank_database_reset_v2";
@@ -402,10 +736,14 @@ const DB = (() => {
     }
     migrateAndPruneStorage();
     ensureBurgerJayCatalogSeeded();
+    ensureBurgerJayDemoDataSeeded();
     idbLoadAll().then(() => {
-      if(ensureBurgerJayCatalogSeeded()){
+      const catSeeded = ensureBurgerJayCatalogSeeded();
+      const demoSeeded = ensureBurgerJayDemoDataSeeded();
+      if(catSeeded || demoSeeded){
         if(typeof POS !== "undefined" && POS.renderCatalog) POS.renderCatalog();
         if(typeof Inventory !== "undefined" && Inventory.renderTable) Inventory.renderTable();
+        if(typeof App !== "undefined" && App.rerenderCurrentView) App.rerenderCurrentView();
       }
     });
     if(read(KEYS.categories) === null) write(KEYS.categories, DEFAULT_CATEGORIES);

@@ -286,17 +286,7 @@ const RealtimeSync = (() => {
         
         console.log('[RealtimeSync] Shift synced from cloud:', fullShiftData);
         
-        // Show notification if changed by another device
-        const deviceId = getDeviceId();
-        if (cloudShift.deviceId && cloudShift.deviceId !== deviceId) {
-          if (cloudShift.status === 'open' && (!localShift || localShift.status !== 'open')) {
-            Utils.toast('Shift opened on another device', 'info', 2000);
-          } else if (cloudShift.status === 'closed' && localShift && localShift.status === 'open') {
-            Utils.toast('Shift closed on another device', 'info', 2000);
-          }
-        }
-        
-        // Refresh UI
+        // (2026-07-13) Refresh UI silently on cloud shift sync; was toasting on login
         if (typeof window !== 'undefined' && window.App?.paintTopbar) window.App.paintTopbar();
         // (2026-07-13) Safe view check in realtime shift sync; was bare App.currentView
         const curV = getAppCurrentView();
@@ -675,8 +665,9 @@ const RealtimeSync = (() => {
           packPrice: Number(product.packPrice) || 0,
           packCost: Number(product.packCost) || 0,
           packBarcode: product.packBarcode || '',
+          choices: Array.isArray(product.choices) ? product.choices : [],
           updatedAt: product.updatedAt || Date.now(),
-          // (2026-07-13) Include deviceId in syncAllProducts; was missing self-echo id
+          // (2026-07-13) Sync products silently without toast spam; was toasting on auto-sync
           createdAt: product.createdAt || Date.now(),
           deviceId: getDeviceId()
         };
@@ -686,10 +677,8 @@ const RealtimeSync = (() => {
       
       await realtimeMod.update(productsRef, updates);
       console.log(`✅ Synced ${products.length} products to cloud`);
-      Utils.toast(`Synced ${products.length} products`, 'success', 2000);
     } catch (error) {
       console.error("Failed to sync products:", error);
-      Utils.toast(`Sync failed: ${error.message}`, 'error', 3000);
     }
   }
 
@@ -715,6 +704,7 @@ const RealtimeSync = (() => {
       packPrice: Number(product.packPrice) || 0,
       packCost: Number(product.packCost) || 0,
       packBarcode: product.packBarcode || '',
+      choices: Array.isArray(product.choices) ? product.choices : [],
       updatedAt: product.updatedAt || Date.now(),
       createdAt: product.createdAt || Date.now(),
       deviceId: getDeviceId()
@@ -921,21 +911,13 @@ const RealtimeSync = (() => {
       if (hasChanges) {
         DB.setRestockLogs(updatedLogs);
         
-        // Show notification
-        const deviceId = getDeviceId();
-        const hasExternalChanges = cloudLogsArray.some(l => l.deviceId && l.deviceId !== deviceId);
-        
-        if (hasExternalChanges) {
-          Utils.toast('Restock logs updated from another device', 'info', 2000);
-        }
-        
-        // (2026-07-13) Safe view check in restock logs sync; was bare App.currentView
+        // (2026-07-13) Sync restock logs silently without toast spam; was toasting on login
         const curV = getAppCurrentView();
         if (typeof Reports !== 'undefined' && curV === 'reports') {
           Reports.render();
         }
         
-        if (callback) callback(filtered);
+        if (callback) callback(updatedLogs);
       }
     });
     
@@ -1029,21 +1011,13 @@ const RealtimeSync = (() => {
       if (hasChanges) {
         DB.setExpenses(updatedExpenses);
         
-        // Show notification
-        const deviceId = getDeviceId();
-        const hasExternalChanges = cloudExpensesArray.some(e => e.deviceId && e.deviceId !== deviceId);
-        
-        if (hasExternalChanges) {
-          Utils.toast('Expenses updated from another device', 'info', 2000);
-        }
-        
-        // (2026-07-13) Safe view check in expenses sync; was bare App.currentView
+        // (2026-07-13) Sync expenses silently without toast spam; was toasting on login
         const curV = getAppCurrentView();
         if (typeof Expenses !== 'undefined' && curV === 'expenses') {
           Expenses.render();
         }
         
-        if (callback) callback(filtered);
+        if (callback) callback(updatedExpenses);
       }
     });
     
@@ -1064,20 +1038,16 @@ const RealtimeSync = (() => {
     // Listen for product additions
     const onChildAddedListener = realtimeMod.onChildAdded(productsRef, (snapshot) => {
       const newProduct = snapshot.val();
+      if (!newProduct || !newProduct.id) return;
       const localProducts = DB.getProducts();
       const exists = localProducts.some(p => p.id === newProduct.id);
       
       if (!exists) {
         console.log('[RealtimeSync] ➕ New product from cloud:', newProduct.name);
         localProducts.push(newProduct);
-        // (2026-07-13) Set added product via DB & repaint table; was direct setItem
+        // (2026-07-13) Set added product silently without toast spam; was toasting on login
         DB.setProducts(localProducts);
         
-        if (newProduct.deviceId && newProduct.deviceId !== deviceId) {
-          Utils.toast(`New product: ${newProduct.name}`, 'info', 2000);
-        }
-        
-        // (2026-07-13) Safe view check in product addition; was bare App.currentView
         const curV = getAppCurrentView();
         if (typeof Inventory !== 'undefined' && curV === 'inventory') {
           if (Inventory.renderTable) Inventory.renderTable();
@@ -1086,7 +1056,7 @@ const RealtimeSync = (() => {
       }
     });
     
-    // (2026-07-13) Ignore self device echo & repaint table only; was view rerender
+    // (2026-07-13) Sync product changes silently and skip unchanged stock/price; was toast loop
     const onChildChangedListener = realtimeMod.onChildChanged(productsRef, (snapshot) => {
       const updatedProduct = snapshot.val();
       if (!updatedProduct || (updatedProduct.deviceId && updatedProduct.deviceId === deviceId)) return;
@@ -1094,35 +1064,21 @@ const RealtimeSync = (() => {
       const index = localProducts.findIndex(p => p.id === updatedProduct.id);
       
       if (index !== -1) {
-        // (2026-07-13) Prevent cloud overwrite of newer local edits; was blind replace
         const localProduct = localProducts[index];
         const localTs = localProduct.updatedAt || localProduct.createdAt || 0;
         const cloudTs = updatedProduct.updatedAt || updatedProduct.createdAt || 0;
-        if (localTs > cloudTs) return;
+        if (localTs >= cloudTs && localProduct.stock === updatedProduct.stock && localProduct.price === updatedProduct.price && localProduct.name === updatedProduct.name) return;
 
-        const oldStock = localProduct.stock;
-        const newStock = updatedProduct.stock;
-        
-        console.log('[RealtimeSync] 🔄 Product changed from cloud:', updatedProduct.name, 
-                    `stock: ${oldStock} → ${newStock}`);
-        
         localProducts[index] = { ...localProduct, ...updatedProduct };
         DB.setProducts(localProducts);
         
-        if (updatedProduct.deviceId && updatedProduct.deviceId !== deviceId) {
-          Utils.toast(`Updated: ${updatedProduct.name} (stock: ${newStock})`, 'info', 2000);
-        }
-        
-        // (2026-07-13) Safe view check in product change; was bare App.currentView
         const curV = getAppCurrentView();
         if (typeof Inventory !== 'undefined' && curV === 'inventory') {
           if (Inventory.renderTable) Inventory.renderTable();
         }
       } else {
-        // (2026-07-13) Add missing changed product to DB; was dropped on index -1
         localProducts.push(updatedProduct);
         DB.setProducts(localProducts);
-        // (2026-07-13) Safe view check on missing product; was bare App.currentView
         const curV = getAppCurrentView();
         if (typeof Inventory !== 'undefined' && curV === 'inventory') {
           if (Inventory.renderTable) Inventory.renderTable();
@@ -1141,14 +1097,9 @@ const RealtimeSync = (() => {
       const filtered = localProducts.filter(p => p.id !== deletedProductId);
       
       if (filtered.length !== localProducts.length) {
-        // (2026-07-13) Remove deleted product via DB & repaint table; was direct setItem
+        // (2026-07-13) Remove deleted product silently without toast spam; was toasting
         DB.setProducts(filtered);
         
-        if (deletedProduct?.deviceId && deletedProduct.deviceId !== deviceId) {
-          Utils.toast('Product deleted on another device', 'info', 2000);
-        }
-        
-        // (2026-07-13) Safe view check in product removal; was bare App.currentView
         const curV = getAppCurrentView();
         if (typeof Inventory !== 'undefined' && curV === 'inventory') {
           if (Inventory.renderTable) Inventory.renderTable();

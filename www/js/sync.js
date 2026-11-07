@@ -195,6 +195,8 @@ const Sync = (() => {
     merged.physicalAudits = mergeArray3Way(base.physicalAudits, local.physicalAudits, remote.physicalAudits, "id", "ts");
     merged.customItems = mergeArray3Way(base.customItems, local.customItems, remote.customItems, "name", "updatedAt");
     merged.heldSales = mergeArray3Way(base.heldSales, local.heldSales, remote.heldSales, "id", "ts");
+    // (2026-07-13) Merge kitchenOrders in 3-way cloud sync; was omitted
+    merged.kitchenOrders = mergeArray3Way(base.kitchenOrders, local.kitchenOrders, remote.kitchenOrders, "id", "timestamp");
     // (2026-07-13) 3-way merge backups metadata in sync; was omitted and reset
     merged.backups = mergeArray3Way(base.backups, local.backups, remote.backups, "id", "createdAt").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
     // (2026-07-13) Merge all tombstoned deletedProductIds; was skipped if in local
