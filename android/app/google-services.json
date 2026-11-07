@@ -1,0 +1,31 @@
+{
+  "project_info": {
+    "project_number": "392777396149",
+    "firebase_url": "https://burgerjay-bogo-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "burgerjay-bogo",
+    "storage_bucket": "burgerjay-bogo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:392777396149:android:c0d0f5b3720cf8263333fc",
+        "android_client_info": {
+          "package_name": "com.burgerjay.pos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPFpQi0Clau4fVXxNrZ7Q1Zo1iQNGKJjM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+

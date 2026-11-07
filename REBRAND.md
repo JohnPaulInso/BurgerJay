@@ -132,3 +132,6 @@ Verified 100% isolation between **BurgerJay** and **Route 98** across Git, Fireb
    - Pre-configured `Combo 1` through `Combo 4` and `Add Combo Meal (Fries & Drink)` with drink choices so cashiers are prompted to select the customer's drink alongside fries flavor and add-ons at checkout, forwarding all selections to the Kitchen Display System (KDS).
 4. **Unified 2-Digit Card # System for Dine-In & Take-Out**:
    - Replaced `Table #` with a 2-digit `Card #` (`01`–`08` quick pills + `01`–`99` input with automatic leading-zero formatting) across Checkout (`js/pos.js`), printed receipts, and the Kitchen Display System (`js/kitchen.js`) so physical number cards can be handed out for both `Dine-In` and `Take-Out` orders.
+5. **7-Day Realistic BurgerJay Demo Dataset & Silent Cloud Sync (`js/db.js`, `js/realtime-sync.js`)**:
+   - Seeded 80 realistic BurgerJay orders across the past 7 days (with 50% COGS/profit margins, drink & fries flavor selections, and Cash/GCash/Card payments), 5 operating expenses (OPEX), 6 closed shift logs + 1 open shift, and 6 live KDS tickets across `new`, `cooking`, `ready`, and `completed` stages.
+   - Removed background toast notification spam in `js/realtime-sync.js` so multi-device product, shift, restock, and expense listeners sync silently after login.

@@ -1,8 +1,8 @@
 // ============================================================
 // sw.js — app-shell cache for BurgerJay POS (Offline Web Support)
 // ============================================================
-// (2026-07-13) Bump SW cache & include BurgerJay menu assets; was v1
-const CACHE_NAME = "burgerjay-pos-v2";
+// (2026-07-13) Bump SW cache to v3 for demo seed & silent sync; was v2
+const CACHE_NAME = "burgerjay-pos-v3";
 const SHELL_FILES = [
   "./",
   "./index.html",

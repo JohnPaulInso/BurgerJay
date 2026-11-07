@@ -27,6 +27,8 @@ const Reports = (() => {
   let overviewCharts = {};
   // (2026-07-13) Track selected receipt IDs for batch deletion; was untracked
   let selectedReceiptIds = new Set();
+  // (2026-07-13) Default receipt stock badge toggle to OFF for restaurant; was always shown
+  let showReceiptStock = localStorage.getItem("bj_show_receipt_stock") === "1";
   // (2026-07-13) Track receipt pagination state; was unpaginated
   let receiptPage = 1;
   // (2026-07-13) Set default receipts rows per page to 30; was 40
@@ -205,8 +207,8 @@ const Reports = (() => {
     });
   }
 
-  // (2026-07-13) Shared TXN ID formatter; was inline per-call, inconsistent
-  function fmtTxnId(id){ const c=(id||"").replace(/[^a-zA-Z0-9]/g,"").toUpperCase().slice(-8); return `TXN-${c||"00000000"}`; }
+  // (2026-07-13) Strip duplicate TXN prefix in fmtTxnId; was TXN-TXN0080
+  function fmtTxnId(id){ const c=String(id||"").replace(/^TXN[-_]?/i,"").replace(/[^a-zA-Z0-9]/g,"").toUpperCase().slice(-8); return `TXN-${c||"0000"}`; }
 
   // (2026-07-13) Reconstruct stock change accurately; was naive current stock
   function computeItemStockChange(item, sale, matchedProduct, allSales){
@@ -303,7 +305,7 @@ const Reports = (() => {
                 const ppp = Number(l.piecesPerPack || matched.piecesPerPack) || 1;
                 const pieces = (l.unitType === "pack" && ppp > 1) ? lQty * ppp : lQty;
                 const stockInfo = computeItemStockChange(l, sale, matched, allSalesList);
-                const showStockChip = stockInfo.show;
+                const showStockChip = showReceiptStock && stockInfo.show;
                 const sBefore = stockInfo.before;
                 const sAfter = stockInfo.after;
                 const price = Number(l.price) || 0;
@@ -2353,9 +2355,15 @@ const Reports = (() => {
             ${Icons.get("x",{size:14})}
           </button>
         </div>
-        <button type="button" class="btn btn-primary btn-sm font-bold" id="btn-add-custom-receipt" style="height:36px;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
-          ${Icons.get("plus",{size:15})} Add Custom Receipt
-        </button>
+        <!-- (2026-07-13) Add toggle button to enable/disable stock numbers on receipts; was always on -->
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <button type="button" class="btn ${showReceiptStock ? "btn-primary" : "btn-outline"} btn-sm font-bold" id="btn-toggle-receipt-stock" style="height:36px;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;" title="Show or hide stock numbers on receipt items">
+            ${Icons.get("box",{size:15})} ${showReceiptStock ? "Stock: ON" : "Stock: OFF"}
+          </button>
+          <button type="button" class="btn btn-primary btn-sm font-bold" id="btn-add-custom-receipt" style="height:36px;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
+            ${Icons.get("plus",{size:15})} Add Custom Receipt
+          </button>
+        </div>
       </div>
       ${receiptSearchTerm ? `
         <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:8px;">
@@ -2443,7 +2451,7 @@ const Reports = (() => {
                   const ppp = Number(it.piecesPerPack || matched.piecesPerPack) || 1;
                   const pieces = (it.unitType === "pack" && ppp > 1) ? itQty * ppp : itQty;
                   const stockInfo = computeItemStockChange(it, s, matched, sales);
-                  const showStockChip = stockInfo.show;
+                  const showStockChip = showReceiptStock && stockInfo.show;
                   const sBefore = stockInfo.before;
                   const sAfter = stockInfo.after;
                   /* Item row with stock chip */
@@ -5007,7 +5015,12 @@ const Reports = (() => {
         receiptPage = 1;
         render();
       });
-      // (2026-07-13) Wire add custom receipt button click; was missing
+      // (2026-07-13) Wire add custom receipt and stock toggle buttons; was missing
+      document.getElementById("btn-toggle-receipt-stock")?.addEventListener("click", () => {
+        showReceiptStock = !showReceiptStock;
+        localStorage.setItem("bj_show_receipt_stock", showReceiptStock ? "1" : "0");
+        render();
+      });
       document.getElementById("btn-add-custom-receipt")?.addEventListener("click", () => openAddCustomReceiptModal());
       
       // (2026-07-13) Save daily starting & ending balance to DB; was shift only
