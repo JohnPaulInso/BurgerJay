@@ -973,6 +973,8 @@ const Sync = (() => {
 
     // (2026-07-13) Auto-pull cloud snapshot on launch; was skipped if local exists
     pullSnapshot();
+    // (2026-07-13) Auto-drain offline queue on launch; was online event only
+    syncOfflineQueue().catch(()=>{});
 
     // (2026-07-13) Throttle visibility pull to 10m & omit focus pull; was quota drain
     document.addEventListener("visibilitychange", () => {

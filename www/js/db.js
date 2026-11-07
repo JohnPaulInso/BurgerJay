@@ -26,6 +26,157 @@ const DB = (() => {
     trash: NS+"trash"
   };
 
+  // (2026-07-13) Move queues & snapshots to IndexedDB; was localStorage only
+  const IDB_NAME = "minimart_pos_idb";
+  const IDB_STORE = "kv_store";
+  const IDB_ONLY_KEYS = new Set([KEYS.backups, KEYS.syncBaseline, KEYS.offlineQueue, KEYS.trash]);
+  let idbInstance = null;
+
+  function openIDB(){
+    if(idbInstance) return Promise.resolve(idbInstance);
+    if(typeof indexedDB === "undefined") return Promise.resolve(null);
+    return new Promise((resolve) => {
+      try{
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if(!db.objectStoreNames.contains(IDB_STORE)){
+            db.createObjectStore(IDB_STORE);
+          }
+        };
+        req.onsuccess = () => { idbInstance = req.result; resolve(idbInstance); };
+        req.onerror = () => { resolve(null); };
+      }catch(e){ resolve(null); }
+    });
+  }
+
+  function idbGet(k){
+    return openIDB().then(db => {
+      if(!db) return null;
+      return new Promise((resolve) => {
+        try{
+          const tx = db.transaction(IDB_STORE, "readonly");
+          const req = tx.objectStore(IDB_STORE).get(k);
+          req.onsuccess = () => resolve(req.result ?? null);
+          req.onerror = () => resolve(null);
+        }catch(e){ resolve(null); }
+      });
+    });
+  }
+
+  function idbSet(k, v){
+    return openIDB().then(db => {
+      if(!db) return false;
+      return new Promise((resolve) => {
+        try{
+          const tx = db.transaction(IDB_STORE, "readwrite");
+          tx.objectStore(IDB_STORE).put(v, k);
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = () => resolve(false);
+        }catch(e){ resolve(false); }
+      });
+    });
+  }
+
+  function idbLoadAll(){
+    return openIDB().then(db => {
+      if(!db) return;
+      return new Promise((resolve) => {
+        try{
+          const tx = db.transaction(IDB_STORE, "readonly");
+          const req = tx.objectStore(IDB_STORE).openCursor();
+          req.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if(cursor){
+              const k = cursor.key;
+              const v = cursor.value;
+              if(!memCache.has(k) || IDB_ONLY_KEYS.has(k) || k === KEYS.sales){
+                memCache.set(k, v);
+              }
+              cursor.continue();
+            } else {
+              resolve();
+            }
+          };
+          req.onerror = () => resolve();
+        }catch(e){ resolve(); }
+      });
+    });
+  }
+
+  function pruneLocalStorage(){
+    try{
+      IDB_ONLY_KEYS.forEach(k => {
+        try{ localStorage.removeItem(k); }catch(e){}
+      });
+      const rawSales = localStorage.getItem(KEYS.sales);
+      if(rawSales){
+        try{
+          const s = JSON.parse(rawSales);
+          if(Array.isArray(s) && s.length > 50){
+            localStorage.setItem(KEYS.sales, JSON.stringify(s.slice(0, 50)));
+          }
+        }catch(e){}
+      }
+      [KEYS.stockLog, KEYS.restockLogs, KEYS.voidLogs].forEach(k => {
+        const raw = localStorage.getItem(k);
+        if(raw){
+          try{
+            const arr = JSON.parse(raw);
+            if(Array.isArray(arr) && arr.length > 50){
+              localStorage.setItem(k, JSON.stringify(arr.slice(0, 50)));
+            }
+          }catch(e){}
+        }
+      });
+    }catch(e){}
+  }
+
+  function migrateAndPruneStorage(){
+    try{
+      IDB_ONLY_KEYS.forEach(k => {
+        const raw = localStorage.getItem(k);
+        if(raw !== null && raw !== undefined){
+          try{
+            const parsed = JSON.parse(raw);
+            memCache.set(k, parsed);
+            idbSet(k, parsed);
+          }catch(e){
+            memCache.set(k, raw);
+            idbSet(k, raw);
+          }
+          localStorage.removeItem(k);
+        }
+      });
+      const rawSales = localStorage.getItem(KEYS.sales);
+      if(rawSales){
+        try{
+          const s = JSON.parse(rawSales);
+          if(Array.isArray(s) && s.length){
+            idbSet(KEYS.sales, s);
+            if(s.length > 150){
+              localStorage.setItem(KEYS.sales, JSON.stringify(s.slice(0, 150)));
+            }
+          }
+        }catch(e){}
+      }
+      [KEYS.stockLog, KEYS.restockLogs, KEYS.voidLogs].forEach(k => {
+        const raw = localStorage.getItem(k);
+        if(raw){
+          try{
+            const arr = JSON.parse(raw);
+            if(Array.isArray(arr) && arr.length){
+              idbSet(k, arr);
+              if(arr.length > 100){
+                localStorage.setItem(k, JSON.stringify(arr.slice(0, 100)));
+              }
+            }
+          }catch(e){}
+        }
+      });
+    }catch(e){}
+  }
+
   const memCache = new Map();
   function invalidateCache(){
     memCache.clear();
@@ -33,10 +184,22 @@ const DB = (() => {
     cachedProducts = null;
     cachedCategories = null;
   }
+
+  // Eagerly migrate and load IDB
+  migrateAndPruneStorage();
+  idbLoadAll();
+
   // (2026-07-13) BroadcastChannel & storage event for split screen; was storage only
   let crossTabSync = null;
   if(typeof window !== "undefined"){
     const onRemoteChange = (key) => {
+      if(key && IDB_ONLY_KEYS.has(key)){
+        idbGet(key).then(val => {
+          if(val !== null && val !== undefined) memCache.set(key, val);
+          if(typeof App !== "undefined" && App.rerenderCurrentView) App.rerenderCurrentView();
+        });
+        return;
+      }
       invalidateCache();
       if(typeof App !== "undefined" && App.rerenderCurrentView) App.rerenderCurrentView();
       if(key === KEYS.products || !key){
@@ -56,7 +219,7 @@ const DB = (() => {
   let cachedCategories = null;
   let isSyncRestoring = false;
 
-  // (2026-07-13) Parse JSON with fallback to raw string; was failing on unquoted
+  // (2026-07-13) Read from memCache, fallback to localStorage; was skipping cache
   function read(key, fallback = null){
     if(memCache.has(key)) return memCache.get(key);
     try{
@@ -68,32 +231,38 @@ const DB = (() => {
       }catch(_err){
         val = raw;
       }
-      if(key !== KEYS.backups && key !== KEYS.syncBaseline){
-        memCache.set(key, val);
-      }
+      memCache.set(key, val);
       return val;
     }catch(e){ console.warn("DB read failed", key, e); return fallback; }
   }
-  // (2026-07-13) Exclude bulky snapshots from permanent memCache; was caching all
+  // (2026-07-13) Persist to IndexedDB & prune localStorage; was localStorage only
   function write(key, value, silent = false){
-    if(key !== KEYS.backups && key !== KEYS.syncBaseline){
-      memCache.set(key, value);
-    } else {
-      memCache.delete(key);
-    }
+    memCache.set(key, value);
     if(key === KEYS.sales) cachedProcessedSales = null;
     if(key === KEYS.products) cachedProducts = null;
     if(key === KEYS.categories) cachedCategories = null;
-    try{
-      localStorage.setItem(key, JSON.stringify(value));
-    }catch(e){
-      // (2026-07-13) Evict syncBaseline and heavy backups on quota exceeded; was warn only
+
+    idbSet(key, value);
+
+    if(IDB_ONLY_KEYS.has(key)){
+      try{ localStorage.removeItem(key); }catch(e){}
+    } else {
+      let lsVal = value;
+      if(key === KEYS.sales && Array.isArray(value) && value.length > 150){
+        lsVal = value.slice(0, 150);
+      } else if((key === KEYS.stockLog || key === KEYS.restockLogs || key === KEYS.voidLogs) && Array.isArray(value) && value.length > 100){
+        lsVal = value.slice(0, 100);
+      }
       try{
-        localStorage.removeItem(KEYS.syncBaseline);
-        localStorage.removeItem(KEYS.backups);
-        localStorage.setItem(key, JSON.stringify(value));
-      }catch(err){
-        console.warn("DB write failed for key:", key, e);
+        localStorage.setItem(key, JSON.stringify(lsVal));
+      }catch(e){
+        pruneLocalStorage();
+        try{
+          if(key === KEYS.sales && Array.isArray(value) && value.length > 50){
+            lsVal = value.slice(0, 50);
+          }
+          localStorage.setItem(key, JSON.stringify(lsVal));
+        }catch(_err){}
       }
     }
     // (2026-07-13) Post message to crossTabSync channel; was local storage only
@@ -168,7 +337,10 @@ const DB = (() => {
     }
   };
 
+  // (2026-07-13) Migrate storage to IDB on DB.init; was localStorage only
   function init(){
+    migrateAndPruneStorage();
+    idbLoadAll();
     if(read(KEYS.categories) === null) write(KEYS.categories, DEFAULT_CATEGORIES);
     // (2026-07-13) Auto-set default Firebase config in stored settings; was unconfigured
     const curSettings = read(KEYS.settings);
@@ -875,9 +1047,11 @@ const DB = (() => {
   }
   const getOfflineQueue = () => read(KEYS.offlineQueue, []);
   const setOfflineQueue = (v) => write(KEYS.offlineQueue, v);
+  // (2026-07-13) Queue offline txn to IndexedDB & cap to 100; was 50 in storage
   function queueOfflineTransaction(txn){
     const q = getOfflineQueue();
     q.push({ ...txn, queuedAt: Date.now() });
+    if(q.length > 100) q.splice(0, q.length - 100);
     setOfflineQueue(q);
   }
   const getShift       = () => {
@@ -962,18 +1136,21 @@ const DB = (() => {
   const setDayBalances = (v) => write(KEYS.dayBalances, v || {});
   const getSyncMeta    = () => read(KEYS.syncMeta, { lastSynced:null, status:"idle" });
   const setSyncMeta    = (v) => write(KEYS.syncMeta, v);
-  // (2026-07-13) Store sync baseline in memory & sessionStorage; was filling localStorage
+  // (2026-07-13) Sync baseline in memory & IndexedDB; was filling localStorage
   let inMemorySyncBaseline = null;
   const getSyncBaseline = () => {
     if(inMemorySyncBaseline) return inMemorySyncBaseline;
+    if(memCache.has(KEYS.syncBaseline)) return memCache.get(KEYS.syncBaseline);
     try {
-      const stored = sessionStorage.getItem(KEYS.syncBaseline) || localStorage.getItem(KEYS.syncBaseline);
+      const stored = sessionStorage.getItem(KEYS.syncBaseline);
       if(stored) inMemorySyncBaseline = JSON.parse(stored);
     } catch(e){}
     return inMemorySyncBaseline;
   };
   const setSyncBaseline = (v) => {
     inMemorySyncBaseline = v;
+    memCache.set(KEYS.syncBaseline, v);
+    idbSet(KEYS.syncBaseline, v);
     try {
       localStorage.removeItem(KEYS.syncBaseline);
       sessionStorage.setItem(KEYS.syncBaseline, JSON.stringify(v));
@@ -1501,19 +1678,20 @@ const DB = (() => {
   }
 
   function getBackups(){ return read(KEYS.backups, []); }
-  // (2026-07-13) Retain all backups metadata; was capped at 5
-  // (2026-07-13) Cap backup summaries to 10 to prevent quota exceeded; was unbounded
+  // (2026-07-13) Cap backups to 30 & prune >60d in IndexedDB; was 10 in storage
   function setBackups(b){
     const seen = new Set();
     const sanitized = [];
+    const sixtyDaysAgo = Date.now() - (60 * 24 * 60 * 60 * 1000);
     (b || []).forEach(x => {
       if(!x || !x.id || seen.has(x.id)) return;
+      if((x.createdAt || 0) < sixtyDaysAgo && sanitized.length >= 10) return;
       seen.add(x.id);
       const copy = { ...x };
       delete copy.data;
       sanitized.push(copy);
     });
-    const capped = sanitized.slice(0, 10);
+    const capped = sanitized.slice(0, 30);
     return write(KEYS.backups, capped);
   }
 
@@ -1840,12 +2018,22 @@ const DB = (() => {
       isSyncRestoring = false;
     }
   }
+  // (2026-07-13) Wipe IDB, memory & localStorage on wipeAll; was storage only
   function wipeAll(){
     memCache.clear();
     cachedProcessedSales = null;
     cachedProducts = null;
     cachedCategories = null;
-    Object.values(KEYS).forEach(k => localStorage.removeItem(k));
+    Object.values(KEYS).forEach(k => {
+      try{ localStorage.removeItem(k); }catch(e){}
+    });
+    openIDB().then(db => {
+      if(!db) return;
+      try{
+        const tx = db.transaction(IDB_STORE, "readwrite");
+        tx.objectStore(IDB_STORE).clear();
+      }catch(e){}
+    });
     init();
   }
 

@@ -843,8 +843,8 @@ const POS = (() => {
       branchName: DB.getCurrentBranch ? DB.getCurrentBranch()?.name : "Main Branch"
     };
     const sales = DB.getSales(); sales.unshift(sale); DB.setSales(sales);
-    // (2026-07-13) Queue transaction for offline sync safety; was online check
-    if(DB.queueOfflineTransaction) DB.queueOfflineTransaction(sale);
+    // (2026-07-13) Queue offline sale only when disconnected; was always queuing
+    if(DB.queueOfflineTransaction && !navigator.onLine) DB.queueOfflineTransaction(sale);
     if(activeHeldId){
       DB.setHeldSales(DB.getHeldSales().filter(x => x.id !== activeHeldId));
       activeHeldId = null;
