@@ -80,10 +80,15 @@ const Settings = (() => {
         title: "Delete Staff Account?",
         message: `Are you sure you want to remove "${u.name}" (${u.role})?`,
         onConfirm: () => {
+          // (2026-07-13) Sync POS cashiers list when deleting staff account; was users only
           const rem = DB.getUsers().filter(x => x.id !== u.id);
           DB.setUsers(rem);
+          if(u.role === "cashier"){
+            DB.setCashiers(DB.getCashiers().filter(c => c.toLowerCase() !== u.name.toLowerCase()));
+          }
           Utils.toast(`Removed staff member "${u.name}".`, "info");
           renderStaffTable();
+          renderCashiersList();
         }
       });
     });
@@ -167,20 +172,20 @@ const Settings = (() => {
     });
   }
 
-  // (2026-07-13) Manage POS cashiers roster in settings; was hardcoded 2 names
+  // (2026-07-13) Support empty POS cashiers list and removal of any cashier; was requiring 1
   function renderCashiersList(){
     const wrap = document.getElementById("cashiers-list");
     if(!wrap) return;
     const cashiers = DB.getCashiers();
     wrap.innerHTML = `
       <div class="table-wrap"><table class="data"><thead><tr><th>#</th><th>Cashier Name</th><th style="text-align:right;">Actions</th></tr></thead><tbody>
-        ${cashiers.map((c, i) => `<tr>
+        ${cashiers.length ? cashiers.map((c, i) => `<tr>
           <td class="text-faint">${i + 1}</td>
           <td><strong>${Utils.escapeHtml(c)}</strong></td>
           <td style="text-align:right;">
-            ${cashiers.length > 1 ? `<button class="btn btn-sm btn-ghost" data-rm-cashier="${Utils.escapeHtml(c)}" style="color:var(--danger);">${Icons.get("trash",{size:13})} Remove</button>` : `<span class="text-xs text-faint">Required</span>`}
+            <button class="btn btn-sm btn-ghost" data-rm-cashier="${Utils.escapeHtml(c)}" style="color:var(--danger);">${Icons.get("trash",{size:13})} Remove</button>
           </td>
-        </tr>`).join("")}
+        </tr>`).join("") : `<tr><td colspan="3" class="text-center text-faint" style="padding:18px;">No POS cashiers added yet.</td></tr>`}
       </tbody></table></div>
       <div class="input-row" style="margin-top:10px;">
         <input class="input" id="new-cashier-input" placeholder="Enter cashier name (e.g. Maria)">
@@ -190,8 +195,11 @@ const Settings = (() => {
       const name = b.dataset.rmCashier;
       const cur = DB.getCashiers().filter(x => x !== name);
       DB.setCashiers(cur);
+      const users = DB.getUsers().filter(u => !(u.role === "cashier" && u.name.toLowerCase() === name.toLowerCase()));
+      DB.setUsers(users);
       Utils.toast(`Removed cashier "${name}".`, "info");
       renderCashiersList();
+      renderStaffTable();
     });
     const addBtn = wrap.querySelector("#btn-add-cashier");
     const input = wrap.querySelector("#new-cashier-input");
@@ -472,7 +480,8 @@ const Settings = (() => {
               const blob = new Blob([JSON.stringify(snap, null, 2)], { type:"application/json" });
               const a = document.createElement("a");
               a.href = URL.createObjectURL(blob);
-              a.download = `route98_${id}.json`;
+              // (2026-07-13) Use burgerjay prefix for backup download; was route98
+              a.download = `burgerjay_${id}.json`;
               a.click();
             }}
           ]
@@ -493,7 +502,8 @@ const Settings = (() => {
         const blob = new Blob([JSON.stringify(snap, null, 2)], { type:"application/json" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = `route98_${id}.json`;
+        // (2026-07-13) Use burgerjay prefix for backup download; was route98
+        a.download = `burgerjay_${id}.json`;
         a.click();
       };
     });

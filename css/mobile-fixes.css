@@ -107,22 +107,24 @@
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
   }
-  /* (2026-07-13) Active bottom nav color & inactive gray; was colored */
+  /* (2026-07-13) Set BurgerJay red & gold bottom nav active colors; was blue */
   .bn-btn.active {
-    color: var(--brand, #2563eb) !important;
+    color: var(--brand, #C5161D) !important;
   }
-  .bn-btn.active[data-nav="dashboard"] { color: #312E81 !important; }
-  .bn-btn.active[data-nav="shift"] { color: #0284C7 !important; }
-  .bn-btn.active[data-nav="pos"] { color: #2563EB !important; }
-  .bn-btn.active[data-nav="gasoline"] { color: #D97706 !important; }
-  .bn-btn.active[data-nav="reports"] { color: var(--brand, #2563eb) !important; }
-  .bn-btn.active[data-nav="inventory"] { color: var(--brand, #2563eb) !important; }
-  [data-theme="dark"] .bn-btn.active[data-nav="dashboard"] { color: #818CF8 !important; }
-  [data-theme="dark"] .bn-btn.active[data-nav="shift"] { color: #38BDF8 !important; }
-  [data-theme="dark"] .bn-btn.active[data-nav="pos"] { color: #60A5FA !important; }
-  [data-theme="dark"] .bn-btn.active[data-nav="gasoline"] { color: #FBBF24 !important; }
-  [data-theme="dark"] .bn-btn.active[data-nav="reports"] { color: var(--brand, #60A5FA) !important; }
-  [data-theme="dark"] .bn-btn.active[data-nav="inventory"] { color: var(--brand, #60A5FA) !important; }
+  .bn-btn.active[data-nav="dashboard"] { color: #8B151B !important; }
+  .bn-btn.active[data-nav="shift"] { color: #D4971A !important; }
+  .bn-btn.active[data-nav="pos"] { color: #C5161D !important; }
+  .bn-btn.active[data-nav="kitchen"] { color: #D4971A !important; }
+  .bn-btn.active[data-nav="gasoline"] { color: #D4971A !important; }
+  .bn-btn.active[data-nav="reports"] { color: var(--brand, #C5161D) !important; }
+  .bn-btn.active[data-nav="inventory"] { color: var(--brand, #C5161D) !important; }
+  [data-theme="dark"] .bn-btn.active[data-nav="dashboard"] { color: #FCA5A5 !important; }
+  [data-theme="dark"] .bn-btn.active[data-nav="shift"] { color: #FDE047 !important; }
+  [data-theme="dark"] .bn-btn.active[data-nav="pos"] { color: #EF4444 !important; }
+  [data-theme="dark"] .bn-btn.active[data-nav="kitchen"] { color: #FDE047 !important; }
+  [data-theme="dark"] .bn-btn.active[data-nav="gasoline"] { color: #FDE047 !important; }
+  [data-theme="dark"] .bn-btn.active[data-nav="reports"] { color: var(--brand, #EF4444) !important; }
+  [data-theme="dark"] .bn-btn.active[data-nav="inventory"] { color: var(--brand, #EF4444) !important; }
   .bn-btn:not(.active) .ic {
     color: var(--ink-faint, #64748b) !important;
   }

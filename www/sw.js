@@ -1,14 +1,27 @@
 // ============================================================
-// sw.js — app-shell cache for Route 98 POS (Offline Web Support)
+// sw.js — app-shell cache for BurgerJay POS (Offline Web Support)
 // ============================================================
-// (2026-07-13) Cache app shell and enable offline web view; was unregistering
-const CACHE_NAME = "route98-pos-v11";
+// (2026-07-13) Bump SW cache & include BurgerJay menu assets; was v1
+const CACHE_NAME = "burgerjay-pos-v2";
 const SHELL_FILES = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./route98_logo.png",
+  "./burgerjay_logo.png",
   "./icon.png",
+  "./assets/Bacon with Fries.png",
+  "./assets/Baconarian.png",
+  "./assets/Cheezdog.png",
+  "./assets/Combo1.png",
+  "./assets/Combo2.png",
+  "./assets/Combo3.png",
+  "./assets/Combo4.png",
+  "./assets/Egg Champ.png",
+  "./assets/Fries.png",
+  "./assets/Hawaiian Blast.png",
+  "./assets/Magnum Slam.png",
+  "./assets/Triple Decker.png",
+  "./assets/Twin Pounder.png",
   "./css/tokens.css",
   "./css/base.css",
   "./css/views.css",

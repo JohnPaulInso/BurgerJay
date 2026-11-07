@@ -1,8 +1,8 @@
-package com.route98.pos;
+package com.burgerjay.pos;
 
 import com.getcapacitor.BridgeActivity;
 
-// (2026-07-13) Disable WebView overscroll rubber band stretch; prev: default
+// (2026-07-13) Rebrand Android package to com.burgerjay.pos; was com.route98.pos
 public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
@@ -12,3 +12,4 @@ public class MainActivity extends BridgeActivity {
         }
     }
 }
+

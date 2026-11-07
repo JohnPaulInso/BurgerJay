@@ -45,9 +45,18 @@ const Utils = (() => {
   function productThumb(product, opts = {}){
     const iconName = DB.categoryIcon(product.category);
     const size = opts.iconSize || 28;
-    const iconSpan = `<span class="ic-svg-wrap" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--brand);opacity:.6;background:#ffffff;">${Icons.get(iconName, { size })}</span>`;
-    const img = product.imageUrl
-      ? `<img src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.name || '')}" loading="lazy" draggable="false" style="position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;object-position:center;z-index:1;background:#ffffff;display:block;" onload="var w=this.previousElementSibling;if(w&&w.classList.contains('ic-svg-wrap'))w.style.display='none';" onerror="this.style.display='none';">`
+    // (2026-07-13) Render BurgerJay food illustration fallback for restaurant items; was generic icon
+    const cat = String(product.category || "").toUpperCase();
+    const isFoodItem = cat.includes("BURGER") || cat.includes("FRIES") || cat.includes("FOOD") || /combo|burger|fries|cheezdog/i.test(product.name || "");
+    const fallbackGraphic = (isFoodItem && typeof Kitchen !== "undefined" && Kitchen.getFoodIllustration)
+      ? `<div style="width:${Math.max(44, size * 1.6)}px;height:${Math.max(44, size * 1.6)}px;display:flex;align-items:center;justify-content:center;">${Kitchen.getFoodIllustration(product.name)}</div>`
+      : Icons.get(iconName, { size });
+    const iconSpan = `<span class="ic-svg-wrap" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--brand);background:#ffffff;">${fallbackGraphic}</span>`;
+    // (2026-07-13) Resolve bare asset image filenames to assets/ folder; was raw path only
+    const rawUrl = String(product.imageUrl || "").trim();
+    const resolvedUrl = (rawUrl && !/^(https?:|data:|blob:|\/|\.\/|assets\/)/i.test(rawUrl)) ? `assets/${rawUrl}` : rawUrl;
+    const img = resolvedUrl
+      ? `<img src="${escapeHtml(resolvedUrl)}" alt="${escapeHtml(product.name || '')}" loading="lazy" draggable="false" style="position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain;object-position:center;z-index:1;background:#ffffff;display:block;" onload="var w=this.previousElementSibling;if(w&&w.classList.contains('ic-svg-wrap'))w.style.display='none';" onerror="this.style.display='none';">`
       : "";
     return `${iconSpan}${img}`;
   }

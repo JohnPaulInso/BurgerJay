@@ -826,7 +826,8 @@ const Restaurant = (() => {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Route98_Restaurant_Reservations_${new Date().toISOString().split("T")[0]}.csv`;
+    // (2026-07-13) Use BurgerJay prefix for reservations CSV export; was Route98
+    link.download = `BurgerJay_Restaurant_Reservations_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     Utils.toast("Restaurant reservations exported to CSV.", "success");
   }

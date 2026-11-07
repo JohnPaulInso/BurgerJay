@@ -547,7 +547,8 @@ const Expenses = (() => {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Route98_Operating_Expenses_${new Date().toISOString().split("T")[0]}.csv`;
+    // (2026-07-13) Use BurgerJay prefix for expenses CSV export; was Route98
+    link.download = `BurgerJay_Operating_Expenses_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     Utils.toast("Expenses exported to CSV.", "success");
   }

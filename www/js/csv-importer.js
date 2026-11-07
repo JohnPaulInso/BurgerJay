@@ -1,6 +1,6 @@
 // ============================================================
 // csv-importer.js — CSV Transaction Import Tool
-// Import Loyverse receipts into Route 98 POS system
+// Import Loyverse receipts into BurgerJay POS system
 // ============================================================
 
 const CSVImporter = (() => {

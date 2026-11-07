@@ -14,8 +14,8 @@ const RealtimeSync = (() => {
     return (typeof window !== "undefined" && window.App) ? (window.App.getCurrentView ? window.App.getCurrentView() : window.App.currentView) : null;
   }
   
-  // Offline sync queue
-  const SYNC_QUEUE_KEY = 'mm_syncQueue';
+  // (2026-07-13) Use BurgerJay syncQueue key; was mm_syncQueue
+  const SYNC_QUEUE_KEY = 'bj_syncQueue';
   let syncQueue = [];
   let isSyncing = false;
   
@@ -196,6 +196,27 @@ const RealtimeSync = (() => {
       }
       realtimeDB = realtimeMod.getDatabase(app);
       isInitialized = true;
+
+      // (2026-07-13) Push imported BurgerJay menu products to RTDB; was blank reset
+      if (!localStorage.getItem('bj_rtdb_assets_menu_v1')) {
+        try {
+          localStorage.setItem('bj_rtdb_assets_menu_v1', 'true');
+          const prods = DB.getProducts() || [];
+          const prodObj = {};
+          prods.forEach(p => {
+            if (p && p.id) {
+              prodObj[p.id] = {
+                ...p,
+                lastModified: p.updatedAt || Date.now(),
+                modifiedBy: getDeviceId()
+              };
+            }
+          });
+          await realtimeMod.set(realtimeMod.ref(realtimeDB, 'products'), prodObj);
+        } catch (seedErr) {
+          console.warn('[RealtimeSync] Menu RTDB sync warning:', seedErr);
+        }
+      }
       
       console.log('[RealtimeSync] ✅ Firebase Realtime Database initialized successfully!');
       // (2026-07-13) Suppress Firebase connected toast; was noisy popup
@@ -1156,11 +1177,12 @@ const RealtimeSync = (() => {
   // DEVICE MANAGEMENT
   // ==============================================================
   
+  // (2026-07-13) Use BurgerJay bj_deviceId; was mm_deviceId
   function getDeviceId() {
-    let deviceId = localStorage.getItem('mm_deviceId');
+    let deviceId = localStorage.getItem('bj_deviceId');
     if (!deviceId) {
       deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('mm_deviceId', deviceId);
+      localStorage.setItem('bj_deviceId', deviceId);
     }
     return deviceId;
   }
@@ -1245,8 +1267,8 @@ const RealtimeSync = (() => {
       // Skip if silent (sync restore) or not products
       if (silent) return;
       
-      // Handle product changes
-      if (key === 'mm_products') {
+      // (2026-07-13) Trigger auto-sync exclusively for BurgerJay bj_ keys; was mm_
+      if (key === 'bj_products') {
         // Debounce to avoid too many syncs
         clearTimeout(syncDebounceTimer);
         syncDebounceTimer = setTimeout(async () => {
@@ -1262,8 +1284,8 @@ const RealtimeSync = (() => {
         }, 1000); // 1 second debounce
       }
       
-      // Handle other data changes (sales, expenses, etc.)
-      if (key === 'mm_sales' || key === 'mm_expenses' || key === 'mm_fuelSales') {
+      // Handle other data changes (sales, expenses, kitchenOrders, etc.)
+      if (key === 'bj_sales' || key === 'bj_expenses' || key === 'bj_kitchenOrders' || key === 'bj_fuelSales') {
         // Trigger Firestore snapshot sync
         clearTimeout(syncDebounceTimer);
         syncDebounceTimer = setTimeout(async () => {

@@ -3,28 +3,26 @@
 // ============================================================
 // (2026-07-13) Group sidebar by 4 businesses & overview; was single list
 const App = (() => {
-  // (2026-07-13) Hide inactive pages & dashboard on desktop/mobile; was visible
+  // (2026-07-13) Set BurgerJay navigation sections and remove gas station; was Route98
   const NAV_SECTIONS = [
     {
       group: "OVERVIEW",
       views: [
-        { id:"shift", label:"Shift", ic:"clock", mod:Shift, roles:["admin","cashier"], color:"#0284C7" }
+        { id:"shift", label:"Shift", ic:"clock", mod:Shift, roles:["admin","cashier"], color:"#D4971A" }
       ]
     },
-    // (2026-07-13) Core retail business units; separated venue and restaurant
     {
       group: "BUSINESS UNITS",
       views: [
-        { id:"pos", label:"Minimart Store", ic:"store", mod:POS, roles:["admin","cashier"], color:"#2563EB" },
-        { id:"gasoline", label:"Gasoline Station", ic:"fuel", mod:Gas, roles:["admin","cashier"], color:"#D97706" }
+        /* (2026-07-13) Register POS and Kitchen KDS view in Business Units; was store only */
+        { id:"pos", label:"Register POS", ic:"store", mod:POS, roles:["admin","cashier"], color:"#C5161D" },
+        { id:"kitchen", label:"Kitchen View (KDS)", ic:"utensils", mod:Kitchen, roles:["admin","cashier"], color:"#F59E0B" }
       ]
     },
     {
       group: "OPERATIONS",
       views: [
-        // (2026-07-13) Sort operations: Reports, Inventory, Expenses (OPEX); was unsorted
         { id:"reports", label:"Reports", ic:"clipboard", mod:Reports, roles:["admin","cashier"], color:"#4B5563" },
-        // (2026-07-13) Restrict inventory view to admin; was admin,cashier
         { id:"inventory", label:"Inventory", ic:"package", mod:Inventory, roles:["admin"], color:"#4B5563" },
         { id:"expenses", label:"Expenses (OPEX)", ic:"dollar-sign", mod:Expenses, roles:["admin"], color:"#DC2626" }
       ]
@@ -38,8 +36,8 @@ const App = (() => {
   ];
   // (2026-07-13) Restore VIEWS definition from NAV_SECTIONS; was missing
   const VIEWS = NAV_SECTIONS.flatMap(s => s.views);
-  // (2026-07-13) Add inventory to bottom nav; was pos/shift/reports/dash/gas only
-  const BOTTOM_NAV_IDS = ["pos","inventory","shift","reports","gasoline"];
+  // (2026-07-13) Set BurgerJay bottom nav items with kitchen view; was route98
+  const BOTTOM_NAV_IDS = ["pos","kitchen","shift","reports","inventory"];
   let currentView = "pos";
 
   function accessibleViews(){
@@ -157,7 +155,8 @@ const App = (() => {
   function paintTopbar(){
     const s = DB.getSettings();
     const title = document.getElementById("topbar-title");
-    if(title) title.textContent = s.businessName;
+    /* (2026-07-13) Set BurgerJay brand name in topbar; was Route 98 */
+    if(title) title.textContent = (s.businessName && s.businessName !== "Route 98") ? s.businessName : "BurgerJay";
     const user = Auth.currentUser();
     const chip = document.getElementById("user-chip-label");
     if(chip) chip.textContent = user?.name || "";
@@ -409,10 +408,10 @@ const App = (() => {
     root.innerHTML = `
       <div id="app">
         <nav class="sidebar" style="overflow-y:auto;">
-          <!-- (2026-07-13) Fix brand logo markup without stray text. Prev: broken onerror -->
+          <!-- (2026-07-13) Set BurgerJay brand logo & title; was Route 98 -->
           <div class="brand">
-            <div class="brand-mark"><img src="route98_logo.png?v=6" alt="Route 98" onerror="this.onerror=null;this.src='icon.png';"></div>
-            <div class="brand-text"><strong id="topbar-title">Route 98</strong><span>Route98 POS System</span></div>
+            <div class="brand-mark"><img src="burgerjay_logo.png?v=1" alt="BurgerJay" onerror="this.onerror=null;this.src='icon.png';"></div>
+            <div class="brand-text"><strong id="topbar-title">BurgerJay</strong><span>POS & Inventory System</span></div>
           </div>
           ${NAV_SECTIONS.map(sec => {
             const visible = sec.views.filter(v => v.roles.includes(role));
@@ -472,7 +471,8 @@ const App = (() => {
           ${BOTTOM_NAV_IDS.map(id => {
             const v = views.find(item => item.id === id);
             if(!v) return "";
-            const lbl = v.id === "dashboard" ? "Dashboard" : (v.id === "gasoline" ? "Gasoline" : (v.id === "pos" ? "Minimart" : v.label.split(" ")[0]));
+            /* (2026-07-13) Set bottom nav labels for Register and Kitchen; was Store */
+            const lbl = v.id === "dashboard" ? "Dashboard" : (v.id === "kitchen" ? "Kitchen" : (v.id === "pos" ? "Register" : v.label.split(" ")[0]));
             return `
             <button class="bn-btn" data-nav="${v.id}" title="${v.label}">
               <!-- (2026-07-13) Nav icons gray when inactive; was colored -->

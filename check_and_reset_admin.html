@@ -1,8 +1,9 @@
-<!DOCTYPE html>
+so not <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Route 98 - Check & Reset Admin PIN</title>
+  <!-- (2026-07-13) Rebrand admin utility to BurgerJay; was Route 98 -->
+  <title>BurgerJay - Check & Reset Admin PIN</title>
   <style>
     body {
       font-family: 'Segoe UI', Arial, sans-serif;
@@ -89,7 +90,8 @@
 </head>
 <body>
   <div class="card">
-    <h1>🔑 Route 98 Admin PIN Checker & Reset</h1>
+    <!-- (2026-07-13) Rebrand heading to BurgerJay; was Route 98 -->
+    <h1>🔑 BurgerJay Admin PIN Checker & Reset</h1>
     <p>This tool will show you all user accounts and their PINs stored in your browser.</p>
     
     <button onclick="checkUsers()">🔍 Show All Users & PINs</button>
@@ -100,18 +102,15 @@
   <div id="results"></div>
 
   <script>
-    const NS = "mm_";
+    // (2026-07-13) Use BurgerJay bj_ namespace and 9898 admin PIN; was mm_ / 1234
+    const NS = "bj_";
     const KEYS = {
       users: NS + "users"
     };
 
+    // (2026-07-13) Keep only default Owner/Admin account; removed Route98 staff
     const DEFAULT_USERS = [
-      { id:"u_admin",   name:"Owner/Admin",   role:"admin",   pin:"1234" },
-      { id:"u_jp",      name:"JP",            role:"admin",   pin:"3333" },
-      { id:"u_sharon",  name:"Sharon",        role:"admin",   pin:"4444" },
-      { id:"u_ike",     name:"Elaicka / Ike", role:"admin",   pin:"5555" },
-      { id:"u_rosella", name:"Rosella",       role:"cashier", pin:"1111" },
-      { id:"u_nino",    name:"Niño",          role:"cashier", pin:"2222" }
+      { id:"u_admin", name:"Owner/Admin", role:"admin", pin:"9898" }
     ];
 
     function checkUsers() {
@@ -221,10 +220,10 @@
         return;
       }
 
-      // Clear all localStorage keys starting with mm_
+      // (2026-07-13) Clear all localStorage keys starting with bj_; was mm_
       const keys = Object.keys(localStorage);
       keys.forEach(key => {
-        if (key.startsWith('mm_')) {
+        if (key.startsWith('bj_')) {
           localStorage.removeItem(key);
         }
       });

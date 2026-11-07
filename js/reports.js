@@ -6,8 +6,8 @@ const Reports = (() => {
   // (2026-07-13) Set All Time as default period filter in reports; was this_week
   let tab = "overview"; // overview | history | fuel
   let todayOnly = false;
-  // (2026-07-13) Persist reports date range across page reloads; was in-memory
-  const RPT_RANGE_KEY = "r98_reports_range_state";
+  // (2026-07-13) Use bj_reports_range_state key; was r98_reports_range_state
+  const RPT_RANGE_KEY = "bj_reports_range_state";
   let periodKey = "all";
   let activeRange = null;
   try {
@@ -3291,15 +3291,16 @@ const Reports = (() => {
               { 
                 label: "Revenue", 
                 data: store, 
-                borderColor: "#3B82F6", 
+                /* (2026-07-13) Set BurgerJay red & gold gradient in trend chart; was blue */
+                borderColor: "#C5161D", 
                 backgroundColor: (context) => {
                   const chart = context.chart;
                   const {ctx, chartArea} = chart;
-                  if (!chartArea || !isFinite(chartArea.top) || !isFinite(chartArea.bottom) || chartArea.bottom <= chartArea.top) return 'rgba(59,130,246,0.1)';
+                  if (!chartArea || !isFinite(chartArea.top) || !isFinite(chartArea.bottom) || chartArea.bottom <= chartArea.top) return 'rgba(197,22,29,0.1)';
                   const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                  gradient.addColorStop(0, 'rgba(59,130,246,0.35)');
-                  gradient.addColorStop(0.5, 'rgba(96,165,250,0.20)');
-                  gradient.addColorStop(1, 'rgba(147,197,253,0.02)');
+                  gradient.addColorStop(0, 'rgba(197,22,29,0.35)');
+                  gradient.addColorStop(0.5, 'rgba(212,151,26,0.20)');
+                  gradient.addColorStop(1, 'rgba(245,184,0,0.02)');
                   return gradient;
                 },
                 fill: true, 
@@ -3307,7 +3308,7 @@ const Reports = (() => {
                 borderWidth: 3,
                 pointRadius: 0,
                 pointHoverRadius: 6,
-                pointHoverBackgroundColor: "#3B82F6",
+                pointHoverBackgroundColor: "#C5161D",
                 pointHoverBorderColor: "#fff",
                 pointHoverBorderWidth: 2
               }
@@ -3618,9 +3619,9 @@ const Reports = (() => {
             datasets: [{
               label: "Revenue",
               data: topProducts.length ? topProducts.map(p => p.revenue) : [0],
-              // (2026-07-13) Per-bar colors; was two-dataset with profit (removed)
-              backgroundColor: ['#3B82F6','#6366F1','#8B5CF6','#4F46E5','#60A5FA','#7C3AED','#2563EB','#818CF8'].slice(0, topProducts.length),
-              hoverBackgroundColor: ['#2563EB','#4F46E5','#7C3AED','#3730A3','#1D4ED8','#6D28D9','#1E40AF','#4338CA'].slice(0, topProducts.length),
+              /* (2026-07-13) Set BurgerJay red & gold bars; was blue/purple */
+              backgroundColor: ['#C5161D','#D4971A','#E0262E','#F5B800','#8B151B','#EAB308','#7D0E13','#B45309'].slice(0, topProducts.length),
+              hoverBackgroundColor: ['#8B151B','#B45309','#C5161D','#D4971A','#5E080C','#CA8A04','#5E080C','#92400E'].slice(0, topProducts.length),
               borderRadius: { topRight: 8, bottomRight: 8, topLeft: 0, bottomLeft: 0 },
               borderSkipped: false,
               borderWidth: 0,
@@ -4539,17 +4540,18 @@ const Reports = (() => {
               labels: days,
               datasets: [{
                 label: chartLabel,
+                /* (2026-07-13) Set BurgerJay red & gold gradient in receipts trend; was blue */
                 data: amounts,
-                borderColor: "#3B82F6",
+                borderColor: "#C5161D",
                 backgroundColor: (context) => {
                   const chart = context.chart;
                   const {ctx, chartArea} = chart;
                   // (2026-07-13) Check finite chartArea bounds on receipts chart; was null-only
-                  if (!chartArea || !isFinite(chartArea.top) || !isFinite(chartArea.bottom) || chartArea.bottom <= chartArea.top) return 'rgba(59,130,246,0.05)';
+                  if (!chartArea || !isFinite(chartArea.top) || !isFinite(chartArea.bottom) || chartArea.bottom <= chartArea.top) return 'rgba(197,22,29,0.05)';
                   const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                  gradient.addColorStop(0, 'rgba(59,130,246,0.15)');
-                  gradient.addColorStop(0.5, 'rgba(59,130,246,0.08)');
-                  gradient.addColorStop(1, 'rgba(59,130,246,0.01)');
+                  gradient.addColorStop(0, 'rgba(197,22,29,0.20)');
+                  gradient.addColorStop(0.5, 'rgba(212,151,26,0.10)');
+                  gradient.addColorStop(1, 'rgba(245,184,0,0.01)');
                   return gradient;
                 },
                 fill: true,
@@ -4557,7 +4559,7 @@ const Reports = (() => {
                 borderWidth: 2.5,
                 pointRadius: isSingleDay ? ((ctx) => (ctx.raw > 0 ? 3.5 : 0)) : (days.length <= 1 ? 4 : 0),
                 pointHoverRadius: 6,
-                pointHoverBackgroundColor: "#3B82F6",
+                pointHoverBackgroundColor: "#C5161D",
                 pointHoverBorderColor: "#fff",
                 pointHoverBorderWidth: 3
               }]

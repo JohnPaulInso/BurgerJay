@@ -1,6 +1,6 @@
 {
-  "appId": "com.route98.pos",
-  "appName": "Route 98",
+  "appId": "com.burgerjay.pos",
+  "appName": "BurgerJay",
   "webDir": "www",
   "server": {
     "androidScheme": "https",

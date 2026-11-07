@@ -125,12 +125,13 @@ const POS = (() => {
     };
   }
 
-  // (2026-07-13) Allow negative stock add to cart; was out-of-stock toast
-  function addToCart(product, qty = 1, unitType = "piece"){
+  // (2026-07-13) Support item flavor/modifier notes in cart lines; was productId only
+  function addToCart(product, qty = 1, unitType = "piece", notes = ""){
+    const cleanNotes = String(notes || "").trim();
     const piecesPerPack = product.piecesPerPack > 1 ? product.piecesPerPack : 1;
     if(unitType === "pack"){
       pushState();
-      const line = cart.find(l => l.productId === product.id && l.unitType === "pack");
+      const line = cart.find(l => l.productId === product.id && l.unitType === "pack" && (l.notes || "") === cleanNotes);
       const packPrice = product.packPrice || (product.price * piecesPerPack);
       if(line){
         line.qty += qty;
@@ -146,6 +147,7 @@ const POS = (() => {
           unitType: "pack",
           unit: product.packUnit || "pack",
           piecesPerPack,
+          notes: cleanNotes,
           imageUrl: product.imageUrl,
           category: product.category
         });
@@ -156,7 +158,7 @@ const POS = (() => {
       return true;
     } else {
       pushState();
-      const line = cart.find(l => l.productId === product.id && l.unitType === "piece");
+      const line = cart.find(l => l.productId === product.id && l.unitType === "piece" && (l.notes || "") === cleanNotes);
       if(line){
         line.qty += qty;
         renderCart();
@@ -171,6 +173,7 @@ const POS = (() => {
           unitType: "piece",
           unit: product.unit || "pc",
           piecesPerPack: 1,
+          notes: cleanNotes,
           imageUrl: product.imageUrl,
           category: product.category
         });
@@ -181,6 +184,271 @@ const POS = (() => {
       Utils.Sound.beep();
       return true;
     }
+  }
+
+  // (2026-07-13) Configurable Drink, Flavor & Add-On Picker at POS; was Fries/Burger only
+  const DEFAULT_DRINK_CHOICES = ["Iced Tea", "Cucumber", "Blue Lemonade", "Coke", "Sprite", "Royal", "Mountain Dew", "Bottled Water"];
+  function getSavedDrinkChoices(product = null){
+    if(product && Array.isArray(product.choices) && product.choices.length) return [...product.choices];
+    try {
+      const raw = localStorage.getItem("bj_drink_choices");
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch(e){}
+    return [...DEFAULT_DRINK_CHOICES];
+  }
+  // (2026-07-13) Sync updated drink choices across Combo 1-4 & Drink items; was single item
+  function saveDrinkChoices(list, product = null){
+    const clean = (Array.isArray(list) ? list : []).map(s => String(s || "").trim()).filter(Boolean);
+    try { localStorage.setItem("bj_drink_choices", JSON.stringify(clean)); } catch(e){}
+    if(typeof DB !== "undefined" && DB.getProducts && DB.updateProduct){
+      const allProds = DB.getProducts() || [];
+      allProds.forEach(p => {
+        if(!p || !p.id) return;
+        const pCat = String(p.category || "").toUpperCase();
+        const pName = String(p.name || "").toLowerCase();
+        if(p.id === product?.id || pCat.includes("DRINK") || pCat.includes("COMBO") || pName.includes("combo")){
+          p.choices = [...clean];
+          DB.updateProduct(p.id, { choices: [...clean] });
+        }
+      });
+    }
+    return clean;
+  }
+
+  function needsFlavorPrompt(product){
+    if(Array.isArray(product?.choices) && product.choices.length > 0) return true;
+    const n = `${product?.name || ""} ${product?.category || ""}`.toLowerCase();
+    return n.includes("fries") || n.includes("combo") || n.includes("burger") || n.includes("cheezdog") || n.includes("drink") || n.includes("beverage") || n.includes("juice") || n.includes("tea") || n.includes("lemonade") || n.includes("soda") || n.includes("softdrink");
+  }
+
+  function promptFlavorModifier(product, card = null, editCartIdx = null){
+    const existingLine = editCartIdx !== null ? cart[editCartIdx] : null;
+    const n = String(product?.name || "").toLowerCase();
+    const cat = String(product?.category || "").toLowerCase();
+    const isCombo = n.includes("combo") || (n.includes("fries") && n.includes("drink"));
+    const isDrinkOnly = !isCombo && (cat.includes("drink") || cat.includes("beverage") || /\b(drink|drinks|juice|tea|lemonade|soda|softdrink)\b/i.test(n));
+    const hasCustomChoices = !isCombo && !isDrinkOnly && Array.isArray(product?.choices) && product.choices.length > 0;
+    const hasFriesFlavor = (n.includes("fries") && !n.includes("bacon")) || isCombo;
+
+    let flavors = hasCustomChoices
+      ? [...product.choices]
+      : isDrinkOnly
+        ? getSavedDrinkChoices(product)
+        : hasFriesFlavor
+          ? ["Cheese", "BBQ", "Sour Cream", "Plain Salted"]
+          : ["Regular", "Cheese", "BBQ", "Spicy"];
+
+    let drinkChoices = (isCombo || isDrinkOnly) ? getSavedDrinkChoices(product) : [];
+    const addons = isDrinkOnly
+      ? ["Regular Ice", "Less Ice", "Extra Ice", "No Ice"]
+      : ["Extra Cheese", "Extra Patty", "No Onions", "Extra Crispy", "No Mayo", "Spicy"];
+
+    let selectedFlavor = flavors[0] || "";
+    let selectedDrink = isCombo ? (drinkChoices[0] || "Iced Tea") : "";
+    const selectedAddons = new Set();
+
+    if(existingLine && existingLine.notes){
+      const parts = existingLine.notes.split("·").map(s => s.trim()).filter(Boolean);
+      parts.forEach(p => {
+        if(isCombo && drinkChoices.includes(p)) selectedDrink = p;
+        else if(flavors.includes(p)) selectedFlavor = p;
+        else selectedAddons.add(p);
+      });
+    }
+
+    const shortTitle = String(product.name || "").replace(/\s*\([^)]*\)/g, "");
+    const body = `
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--brand-tint);border-radius:12px;border:1px solid var(--line-strong);">
+          <div style="width:44px;height:44px;flex-shrink:0;position:relative;border-radius:8px;overflow:hidden;">
+            ${Utils.productThumb(product, { iconSize: 28 })}
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:900;font-size:1rem;color:var(--ink);">${Utils.escapeHtml(shortTitle)}</div>
+            <div class="mono" style="font-weight:800;font-size:0.86rem;color:var(--brand);">${Utils.money(product.price)}</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="flex-between" style="align-items:center;margin-bottom:6px;">
+            <label class="label" style="font-weight:800;font-size:0.76rem;text-transform:uppercase;color:var(--ink-soft);margin-bottom:0;">
+              1. ${isDrinkOnly ? "Select Drink Choice" : isCombo ? "Select Fries Flavor" : "Select Flavor / Option"}
+            </label>
+            ${isDrinkOnly ? `<button type="button" class="btn btn-xs btn-outline" id="btn-toggle-edit-drinks" style="font-size:0.72rem;padding:2px 8px;">✎ Edit / Add Drinks</button>` : ""}
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;" id="mod-flavor-grid"></div>
+        </div>
+
+        ${isCombo ? `
+        <div>
+          <div class="flex-between" style="align-items:center;margin-bottom:6px;">
+            <label class="label" style="font-weight:800;font-size:0.76rem;text-transform:uppercase;color:var(--ink-soft);margin-bottom:0;">
+              2. Select Drink Choice
+            </label>
+            <button type="button" class="btn btn-xs btn-outline" id="btn-toggle-edit-drinks" style="font-size:0.72rem;padding:2px 8px;">✎ Edit / Add Drinks</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;" id="mod-drink-grid"></div>
+        </div>
+        ` : ""}
+
+        <div id="mod-edit-drinks-box" style="display:none;padding:10px;background:var(--paper-dim);border-radius:10px;border:1px solid var(--line-strong);">
+          <div style="font-size:0.76rem;font-weight:800;color:var(--ink-soft);margin-bottom:6px;">ADD OR REMOVE DRINK CHOICES:</div>
+          <div id="mod-edit-drinks-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+          <div style="display:flex;gap:6px;">
+            <input class="input" id="mod-new-drink-input" placeholder="e.g. Pineapple, Root Beer, Pepsi" style="flex:1;height:34px;font-size:0.84rem;">
+            <button type="button" class="btn btn-sm btn-primary" id="btn-add-drink-opt" style="height:34px;white-space:nowrap;">+ Add Drink</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="label" style="font-weight:800;font-size:0.76rem;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px;display:block;">
+            ${isCombo ? "3." : "2."} Optional ${isDrinkOnly ? "Ice / Drink Notes" : "Kitchen Notes / Add-Ons"}
+          </label>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;" id="mod-addon-grid">
+            ${addons.map(a => `
+              <button type="button" class="btn btn-sm ${selectedAddons.has(a) ? 'btn-primary' : 'btn-outline'} mod-addon-btn font-bold" data-addon="${Utils.escapeHtml(a)}" style="border-radius:99px;padding:6px 12px;font-size:0.78rem;">
+                + ${Utils.escapeHtml(a)}
+              </button>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+
+    const applySelection = () => {
+      const notesList = [];
+      if(selectedFlavor && selectedFlavor !== "Regular") notesList.push(selectedFlavor);
+      if(isCombo && selectedDrink) notesList.push(selectedDrink);
+      selectedAddons.forEach(a => notesList.push(a));
+      const finalNotes = notesList.join(" · ");
+
+      if(editCartIdx !== null && cart[editCartIdx]){
+        pushState();
+        cart[editCartIdx].notes = finalNotes;
+        renderCart();
+        if(DB.saveCart) DB.saveCart({ cart, discount });
+      } else {
+        if(addToCart(product, 1, "piece", finalNotes)){
+          if(card) animateFlyToCart(card, product);
+          Utils.toast(`Added ${shortTitle}${finalNotes ? ` (${finalNotes})` : ""}`, "success", 1100);
+        }
+      }
+      Modalz.close();
+    };
+
+    const modal = Modalz.open({
+      title: `${Icons.get("utensils", {size: 17})} ${isDrinkOnly ? "Choose Drink & Notes" : "Choose Flavor, Drink & Notes"}`,
+      body,
+      actions: [
+        { label: "Cancel", cls: "btn-ghost" },
+        { label: editCartIdx !== null ? "Save Notes" : "Add to Order", cls: "btn-primary btn-lg", onClick: applySelection }
+      ]
+    });
+
+    const renderFlavorButtons = () => {
+      const gridEl = modal.querySelector("#mod-flavor-grid");
+      if(!gridEl) return;
+      if(isDrinkOnly) flavors = [...drinkChoices];
+      if(!flavors.includes(selectedFlavor)) selectedFlavor = flavors[0] || "";
+      gridEl.innerHTML = flavors.map(f => `
+        <button type="button" class="btn ${f === selectedFlavor ? 'btn-primary' : 'btn-outline'} mod-flavor-btn font-bold" data-flavor="${Utils.escapeHtml(f)}" style="padding:10px 10px;border-radius:11px;font-size:0.88rem;justify-content:center;">
+          ${Utils.escapeHtml(f)}
+        </button>
+      `).join("");
+      gridEl.querySelectorAll(".mod-flavor-btn").forEach(btn => {
+        btn.onclick = () => {
+          selectedFlavor = btn.dataset.flavor;
+          renderFlavorButtons();
+        };
+      });
+    };
+
+    const renderDrinkButtons = () => {
+      const gridEl = modal.querySelector("#mod-drink-grid");
+      if(!gridEl) return;
+      if(!drinkChoices.includes(selectedDrink)) selectedDrink = drinkChoices[0] || "";
+      gridEl.innerHTML = drinkChoices.map(d => `
+        <button type="button" class="btn ${d === selectedDrink ? 'btn-primary' : 'btn-outline'} mod-drink-btn font-bold" data-drink="${Utils.escapeHtml(d)}" style="padding:10px 10px;border-radius:11px;font-size:0.88rem;justify-content:center;">
+          ${Utils.escapeHtml(d)}
+        </button>
+      `).join("");
+      gridEl.querySelectorAll(".mod-drink-btn").forEach(btn => {
+        btn.onclick = () => {
+          selectedDrink = btn.dataset.drink;
+          renderDrinkButtons();
+        };
+      });
+    };
+
+    const renderEditDrinksPills = () => {
+      const pillsEl = modal.querySelector("#mod-edit-drinks-pills");
+      if(!pillsEl) return;
+      pillsEl.innerHTML = drinkChoices.map((d, idx) => `
+        <span class="badge badge-brand" style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;font-size:0.76rem;border-radius:99px;">
+          <span>${Utils.escapeHtml(d)}</span>
+          ${drinkChoices.length > 1 ? `<button type="button" data-rm-drink="${idx}" style="border:none;background:transparent;color:inherit;cursor:pointer;font-weight:900;font-size:0.88rem;line-height:1;padding:0;">×</button>` : ""}
+        </span>
+      `).join("");
+      pillsEl.querySelectorAll("[data-rm-drink]").forEach(btn => {
+        btn.onclick = () => {
+          const i = Number(btn.dataset.rmDrink);
+          drinkChoices.splice(i, 1);
+          saveDrinkChoices(drinkChoices, product);
+          renderEditDrinksPills();
+          renderFlavorButtons();
+          renderDrinkButtons();
+        };
+      });
+    };
+
+    renderFlavorButtons();
+    if(isCombo) renderDrinkButtons();
+    renderEditDrinksPills();
+
+    const toggleEditBtn = modal.querySelector("#btn-toggle-edit-drinks");
+    const editBox = modal.querySelector("#mod-edit-drinks-box");
+    const newDrinkInput = modal.querySelector("#mod-new-drink-input");
+    if(toggleEditBtn && editBox){
+      toggleEditBtn.onclick = () => {
+        const isHidden = editBox.style.display === "none";
+        editBox.style.display = isHidden ? "block" : "none";
+        if(isHidden) newDrinkInput?.focus();
+      };
+    }
+    const addNewDrinkChoice = () => {
+      const raw = (newDrinkInput?.value || "").trim();
+      if(!raw) return;
+      raw.split(",").map(s => s.trim()).filter(Boolean).forEach(part => {
+        if(!drinkChoices.some(x => x.toLowerCase() === part.toLowerCase())){
+          drinkChoices.push(part);
+        }
+      });
+      saveDrinkChoices(drinkChoices, product);
+      if(newDrinkInput) newDrinkInput.value = "";
+      if(isDrinkOnly) selectedFlavor = drinkChoices[drinkChoices.length - 1];
+      else if(isCombo) selectedDrink = drinkChoices[drinkChoices.length - 1];
+      renderEditDrinksPills();
+      renderFlavorButtons();
+      renderDrinkButtons();
+    };
+    modal.querySelector("#btn-add-drink-opt")?.addEventListener("click", addNewDrinkChoice);
+    newDrinkInput?.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){ e.preventDefault(); addNewDrinkChoice(); }
+    });
+
+    modal.querySelectorAll(".mod-addon-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const a = btn.dataset.addon;
+        if(selectedAddons.has(a)) selectedAddons.delete(a);
+        else selectedAddons.add(a);
+        const active = selectedAddons.has(a);
+        btn.classList.toggle("btn-primary", active);
+        btn.classList.toggle("btn-outline", !active);
+      });
+    });
   }
 
   // (2026-07-13) Deduplicate barcode scans to prevent double add. Prev: double-hit
@@ -305,6 +573,19 @@ const POS = (() => {
     const allStaff = (DB.getUsers ? DB.getUsers().map(u => u.name) : []).filter(Boolean);
     const cashiers = allStaff.length ? allStaff : (DB.getCashiers ? DB.getCashiers() : ["Rosella", "Niño"]);
     const savedCashier = localStorage.getItem("pos_cashier") || cashiers[0] || "Rosella";
+
+    // (2026-07-13) Detect active Dine-In tables from KDS to highlight busy tables; was blind
+    const activeKdsOrders = (DB.getKitchenOrders ? DB.getKitchenOrders() : []).filter(
+      o => (o.orderType || "Dine-In") === "Dine-In" && (o.status === "new" || o.status === "cooking" || o.status === "ready")
+    );
+    const occupiedMap = new Map();
+    activeKdsOrders.forEach(o => {
+      const n = parseInt(String(o.tableNumber || "").replace(/\D/g, ""), 10);
+      if(n > 0) occupiedMap.set(n, (occupiedMap.get(n) || 0) + 1);
+    });
+    const tableRange = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const firstFreeTable = tableRange.find(num => !occupiedMap.has(num)) || 1;
+
     // (2026-07-13) Polish checkout modal structure & presets; was crowded layout
     const body = `
       <div class="due-amount-card checkout-due-card">
@@ -318,6 +599,28 @@ const POS = (() => {
           </div>
         </div>
         <div class="checkout-due-val">${Utils.money(t.grand)}</div>
+      </div>
+      <!-- (2026-07-13) Add Dine-In/Take-Out order type and occupied table indicators; was plain -->
+      <div class="field" style="margin-bottom:12px;background:var(--paper-dim);padding:10px 12px;border-radius:10px;border:1px solid var(--line);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label style="font-size:.78rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-soft);margin:0;">Order Type</label>
+          <div class="order-type-chips" id="order-type-chips" style="display:flex;gap:6px;">
+            <button type="button" class="btn btn-xs btn-primary font-bold order-type-btn active" data-type="Dine-In" style="border-radius:6px;padding:3px 12px;">Dine-In</button>
+            <button type="button" class="btn btn-xs btn-outline font-bold order-type-btn" data-type="Take-Out" style="border-radius:6px;padding:3px 12px;">Take-Out</button>
+          </div>
+        </div>
+        <div id="table-number-wrap" style="display:flex;align-items:center;gap:10px;">
+          <label for="table-number-input" id="table-num-label" style="font-size:.78rem;font-weight:800;text-transform:uppercase;color:var(--ink-soft);white-space:nowrap;margin:0;">Table #</label>
+          <input class="input mono font-bold" id="table-number-input" type="number" min="1" max="99" value="${firstFreeTable}" placeholder="e.g. 5" style="width:70px;text-align:center;font-size:1.15rem;height:36px;border-radius:8px;padding:4px;" maxlength="2">
+          <div class="table-quick-pills" id="table-quick-pills" style="display:flex;gap:4px;overflow-x:auto;padding-bottom:2px;flex:1;">
+            ${tableRange.map(num => {
+              const isBusy = occupiedMap.has(num);
+              const isSelected = num === firstFreeTable;
+              return `<button type="button" class="btn btn-xs table-pill-btn ${isSelected ? 'btn-primary' : 'btn-ghost'}" data-num="${num}" title="${isBusy ? `Table ${String(num).padStart(2,'0')} currently has an active order` : `Table ${String(num).padStart(2,'0')} (Available)`}" style="padding:3px 8px;font-size:0.74rem;border:1.5px solid ${isBusy ? '#F59E0B' : 'var(--line)'};background:${isSelected ? 'var(--brand)' : (isBusy ? '#FFFBEB' : '')};color:${isSelected ? '#fff' : (isBusy ? '#B45309' : '')};border-radius:6px;min-width:34px;font-weight:800;">${String(num).padStart(2,'0')}${isBusy ? '•' : ''}</button>`;
+            }).join("")}
+          </div>
+        </div>
+        <div id="table-occupied-hint" style="display:none;margin-top:6px;font-size:0.73rem;font-weight:750;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;padding:4px 8px;border-radius:6px;"></div>
       </div>
       <div class="pos-payment-methods" id="pay-methods">
         ${["Cash","Card","GCash","Other"].map((m,i)=>`<div class="chip ${i===0?"active":""}" data-m="${m}">${Icons.get(PAY_ICON[m],{size:15})}${m}</div>`).join("")}
@@ -354,6 +657,60 @@ const POS = (() => {
         { label:"Confirm Payment", cls:"btn-primary", onClick: () => finalizeSale(modal) }
       ]
     });
+    /* (2026-07-13) Bind order type & table pill selector handlers; was missing */
+    let orderType = "Dine-In";
+    modal.dataset.orderType = orderType;
+    const tableInput = modal.querySelector("#table-number-input");
+    const tableLabel = modal.querySelector("#table-num-label");
+    const tableHint = modal.querySelector("#table-occupied-hint");
+    // (2026-07-13) Highlight selected table pill & warn if table has active order; was static
+    const updateTableOccupancyUI = () => {
+      const n = parseInt(tableInput?.value || "0", 10);
+      modal.querySelectorAll(".table-pill-btn").forEach(b => {
+        const bNum = Number(b.dataset.num);
+        const isBusy = occupiedMap.has(bNum);
+        const isSel = bNum === n && orderType === "Dine-In";
+        b.style.background = isSel ? "var(--brand)" : (isBusy ? "#FFFBEB" : "");
+        b.style.color = isSel ? "#fff" : (isBusy ? "#B45309" : "");
+      });
+      if(tableHint){
+        if(orderType === "Dine-In" && occupiedMap.has(n)){
+          tableHint.style.display = "block";
+          tableHint.textContent = `⚠ Table T-${String(n).padStart(2, "0")} currently has an active order in the kitchen.`;
+        } else {
+          tableHint.style.display = "none";
+        }
+      }
+    };
+    tableInput?.addEventListener("input", updateTableOccupancyUI);
+    modal.querySelector("#order-type-chips")?.addEventListener("click", (e) => {
+      const btn = e.target.closest(".order-type-btn");
+      if(!btn) return;
+      modal.querySelectorAll(".order-type-btn").forEach(b => {
+        b.classList.remove("active", "btn-primary");
+        b.classList.add("btn-outline");
+      });
+      btn.classList.add("active", "btn-primary");
+      btn.classList.remove("btn-outline");
+      orderType = btn.dataset.type;
+      modal.dataset.orderType = orderType;
+      if(orderType === "Take-Out"){
+        if(tableLabel) tableLabel.textContent = "Buzzer #";
+        if(tableInput) { tableInput.value = ""; tableInput.placeholder = "Auto"; }
+      } else {
+        if(tableLabel) tableLabel.textContent = "Table #";
+        if(tableInput) { tableInput.value = firstFreeTable; tableInput.placeholder = "e.g. 5"; }
+      }
+      updateTableOccupancyUI();
+    });
+    modal.querySelector("#table-quick-pills")?.addEventListener("click", (e) => {
+      const pill = e.target.closest(".table-pill-btn");
+      if(pill && tableInput){
+        tableInput.value = pill.dataset.num;
+        updateTableOccupancyUI();
+      }
+    });
+    updateTableOccupancyUI();
     let method = "Cash";
     modal.querySelector("#pay-methods").addEventListener("click", (e)=>{
       const chip = e.target.closest(".chip"); if(!chip) return;
@@ -440,12 +797,15 @@ const POS = (() => {
     win.innerHTML = `
       <div class="receipt">
         <div class="center">
-          <strong>${Utils.escapeHtml(settings.businessName || "Route 98")}</strong><br>
+          <!-- (2026-07-13) Fallback receipt businessName to BurgerJay; was Route 98 -->
+          <strong>${Utils.escapeHtml(settings.businessName || "BurgerJay")}</strong><br>
           <!-- (2026-07-13) Fallback address to Bogo City; was Cebu City -->
           ${Utils.escapeHtml(settings.address || "Cabangcalan, Dakit, Bogo City, Cebu")}<br>
           ${settings.tin ? `TIN: ${Utils.escapeHtml(settings.tin)}<br>` : ""}
         </div>
         <hr>
+        <!-- (2026-07-13) Print table number and order type on receipt; was missing -->
+        ${sale.tableNumber ? `<div class="row" style="font-weight:800;font-size:1.05em;"><span>${sale.orderType || 'Order'}:</span><span>Table ${Utils.escapeHtml(sale.tableNumber)}</span></div>` : ""}
         <div class="row"><span>${Utils.fmtDate(sale.ts)}</span><span>${txnId}</span></div>
         <div class="row"><span>Cashier: ${Utils.escapeHtml(sale.cashier || "Cashier")}</span><span>${sale.method}</span></div>
         ${sale.refCode ? `<div class="row"><span>Ref #:</span><span class="mono">${Utils.escapeHtml(sale.refCode)}</span></div>` : ""}
@@ -732,61 +1092,84 @@ const POS = (() => {
       printReceipt(sale);
     }
 
-    const body = `
-      <div style="text-align:center;padding:10px 0 16px;">
-        <div style="width:68px;height:68px;border-radius:50%;background:var(--success-tint);color:var(--success-deep);display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;box-shadow:0 4px 14px rgba(22,168,112,0.25);">
-          ${Icons.get("check-circle",{size:38,strokeWidth:2.5})}
-        </div>
-        <h3 style="font-size:1.45rem;font-weight:850;margin-bottom:4px;color:var(--ink);">Payment Completed!</h3>
-        <p class="text-sm text-faint" style="font-weight:600;">${sale.items.length} item(s) purchased</p>
-      </div>
+    // (2026-07-13) Render 2-digit call code on sale completion; was 3-digit slice(-3)
+    const branchLabel = (sale.branchName || (DB.getCurrentBranch && DB.getCurrentBranch()?.name) || "Main Branch").toUpperCase();
+    const isDineIn = (sale.orderType || "Dine-In") === "Dine-In";
+    const rawNum = (sale.tableNumber && sale.tableNumber !== "TO") ? sale.tableNumber : (sale.receiptNo || cleanId || "01");
+    const twoDigit = String(parseInt(String(rawNum).replace(/\D/g, "").slice(-2), 10) || 1).padStart(2, "0");
+    const callCode = isDineIn ? `T-${twoDigit}` : `TO-${twoDigit}`;
+    const totalUnits = (sale.items || []).reduce((s, i) => s + Number(i.qty || 1), 0);
 
-      <div class="card" style="margin-bottom:16px;background:var(--paper-dim);padding:14px 18px;border-radius:var(--r-lg);border:1.5px solid var(--line);">
-        <div class="flex-between" style="margin-bottom:8px;font-size:1rem;border-bottom:1px solid var(--line);padding-bottom:8px;">
-          <span class="text-faint" style="font-weight:700;">Transaction ID</span>
-          <span class="badge badge-neutral mono font-bold" style="font-size:1.05rem;padding:4px 10px;letter-spacing:.03em;color:var(--brand-deep);">${txnId}</span>
+    const body = `
+      <div style="padding:4px 0;">
+        <div class="kds-step-bars" style="max-width:400px;margin:0 auto 10px;">
+          <div class="kds-step-seg filled-red"></div>
+          <div class="kds-step-seg"></div>
+          <div class="kds-step-seg"></div>
+          <div class="kds-step-seg"></div>
         </div>
-        <div class="flex-between" style="margin-bottom:8px;font-size:1.1rem;">
-          <span class="text-faint" style="font-weight:700;">Amount Paid</span>
-          <span class="mono" style="font-size:1.75rem;font-weight:900;color:var(--brand);">${Utils.money(sale.total)}</span>
+
+        <div class="OrderSlipTicket">
+          <!-- (2026-07-13) Strip redundant text in post-checkout receipt modal; was verbose -->
+          <div style="font-size:2.3rem;font-weight:900;color:var(--brand);letter-spacing:-0.03em;line-height:1.05;margin:2px 0 4px;">
+            ${Utils.escapeHtml(callCode)}
+          </div>
+
+          <div style="font-size:0.9rem;font-weight:850;color:var(--ink);">
+            ${isDineIn ? `Dine-In · Table ${Utils.escapeHtml(sale.tableNumber || '01')}` : `Take-Out Order`} · ${Utils.money(sale.total)}
+          </div>
+
+          <div class="kds-tear-line" style="margin:8px -16px;">
+            <div class="kds-tear-dashes"></div>
+          </div>
+
+          <div style="text-align:left;display:flex;flex-direction:column;gap:5px;max-height:150px;overflow-y:auto;margin-bottom:8px;">
+            ${(sale.items || []).map(it => `
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;background:var(--paper);border:1px solid var(--line);">
+                <div style="width:28px;height:28px;flex-shrink:0;">${typeof Kitchen !== "undefined" && Kitchen.getFoodIllustration ? Kitchen.getFoodIllustration(it.name) : ""}</div>
+                <div class="mono" style="font-weight:900;font-size:0.95rem;color:var(--brand-deep);">${it.qty}x</div>
+                <div style="flex:1;min-width:0;font-weight:850;font-size:0.84rem;color:var(--ink);">${Utils.escapeHtml(String(it.name || "").replace(/\s*\([^)]*\)/g, ""))}</div>
+                <div class="mono" style="font-weight:750;font-size:0.8rem;color:var(--ink-soft);">${Utils.money(it.price * it.qty)}</div>
+              </div>
+            `).join("")}
+          </div>
+
+          ${isCash ? `
+            <div style="background:#ECFDF5;border:1.5px solid #A7F3D0;border-radius:10px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;">
+              <div style="text-align:left;">
+                <div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;color:#047857;">Paid: ${Utils.money(sale.tendered)}</div>
+                <div style="font-size:0.86rem;font-weight:850;color:#065F46;">Change</div>
+              </div>
+              <div class="mono" style="font-size:1.5rem;font-weight:900;color:#059669;">${Utils.money(sale.change || 0)}</div>
+            </div>
+          ` : ""}
         </div>
-        <div class="flex-between" style="margin-bottom:6px;font-size:1rem;">
-          <span class="text-faint" style="font-weight:700;">Payment Method</span>
-          <span class="badge badge-brand" style="font-size:.92rem;font-weight:800;padding:4px 10px;">${sale.method}</span>
-        </div>
-        ${sale.refCode ? `
-          <div class="flex-between" style="margin-bottom:6px;font-size:1rem;">
-            <span class="text-faint" style="font-weight:700;">Reference No.</span>
-            <strong class="mono" style="font-size:1.05rem;color:var(--brand-deep);">${Utils.escapeHtml(sale.refCode)}</strong>
-          </div>
-        ` : ""}
-        ${isCash ? `
-          <div class="flex-between" style="margin-bottom:6px;font-size:1.05rem;border-top:1px dashed var(--line);padding-top:8px;">
-            <span class="text-faint" style="font-weight:700;">Cash Tendered</span>
-            <span class="mono font-bold" style="font-size:1.25rem;">${Utils.money(sale.tendered)}</span>
-          </div>
-          <div class="flex-between" style="font-size:1.2rem;">
-            <span style="font-weight:800;color:var(--success-deep);">Change Due</span>
-            <span class="mono" style="font-size:2rem;font-weight:900;color:var(--success-deep);">${Utils.money(sale.change || 0)}</span>
-          </div>
-        ` : ""}
       </div>`;
 
     Modalz.open({
-      title: `${Icons.get("check-circle",{size:17})} Sale Confirmation`,
+      title: `${Icons.get("check-circle",{size:17})} Order Ticket Sent to Kitchen`,
       body,
       wide: true,
       actions: [
-        { label: "Open Drawer", cls: "btn-outline btn-lg", onClick: () => { Utils.openCashDrawer(); } },
+        { label: "Kitchen Board", cls: "btn-outline btn-lg", onClick: () => { Modalz.close(); if(typeof App !== "undefined" && App.navigate) App.navigate("kitchen"); } },
         // (2026-07-13) Line break print receipt button on mobile; was standard button
-        { label: "Print Receipt (JK580H)", cls: "btn-outline btn-lg btn-print-receipt", onClick: () => { printReceipt(sale); } },
-        { label: "Start Next Sale", cls: "btn-primary btn-lg", onClick: Modalz.close }
+        { label: "Print Ticket", cls: "btn-outline btn-lg btn-print-receipt", onClick: () => { printReceipt(sale); } },
+        { label: "Done / Next Order", cls: "btn-primary btn-lg", onClick: Modalz.close }
       ]
     });
   }
 
   function finalizeSale(modal){
     const t = totals();
+    /* (2026-07-13) Validate table number for Dine-In order type; was unvalidated */
+    const orderType = modal.dataset.orderType || "Dine-In";
+    const tableInputVal = (modal.querySelector("#table-number-input")?.value || "").trim();
+    if(orderType === "Dine-In" && (!tableInputVal || tableInputVal === "0")){
+      Utils.Sound.error();
+      Utils.toast("Please enter a Table Number (1-99) for Dine-In.", "error");
+      modal.querySelector("#table-number-input")?.focus();
+      return;
+    }
     // (2026-07-13) Sanitize refCode to alphanumeric; was unsanitized raw string
     const rawRef = (modal.querySelector("#ref-code-input")?.value || "").trim();
     const refCode = rawRef.replace(/[^\x20-\x7E]/g, "").replace(/[^a-zA-Z0-9\s\-_#/]/g, "").slice(0, 30).trim();
@@ -821,6 +1204,35 @@ const POS = (() => {
         if(typeof RealtimeSync !== "undefined" && RealtimeSync.syncSingleProduct){
           RealtimeSync.syncSingleProduct(p);
         }
+        // (2026-07-13) Deduct raw ingredients from BOM recipe & flavor add-ons; was product only
+        const recipeItems = Array.isArray(p.recipe) ? [...p.recipe] : [];
+        const notesLower = String(line.notes || "").toLowerCase();
+        if(notesLower.includes("cheese") && !notesLower.includes("extra cheese")){
+          recipeItems.push({ ingredientId: "p_ing_cheese_pwd", qty: 1 });
+        }
+        if(notesLower.includes("bbq")){
+          recipeItems.push({ ingredientId: "p_ing_bbq_pwd", qty: 1 });
+        }
+        if(notesLower.includes("sour cream")){
+          recipeItems.push({ ingredientId: "p_ing_sourcream_pwd", qty: 1 });
+        }
+        if(notesLower.includes("extra cheese")){
+          recipeItems.push({ ingredientId: "p_ing_sliced_cheese", qty: 1 });
+        }
+        if(notesLower.includes("extra patty")){
+          recipeItems.push({ ingredientId: "p_ing_beef_patty", qty: 1 });
+        }
+        recipeItems.forEach(r => {
+          const ing = products.find(x => x && (x.id === r.ingredientId || (r.name && (x.name || "").toLowerCase() === r.name.toLowerCase())));
+          if(ing){
+            const deductQty = Utils.round2((Number(r.qty) || 1) * pieces);
+            ing.stock = Utils.round2((Number(ing.stock) || 0) - deductQty);
+            ing.updatedAt = Date.now();
+            if(typeof RealtimeSync !== "undefined" && RealtimeSync.syncSingleProduct){
+              RealtimeSync.syncSingleProduct(ing);
+            }
+          }
+        });
       }
     });
     DB.setProducts(products);
@@ -838,11 +1250,33 @@ const POS = (() => {
       // (2026-07-13) Support all staff as cashier in sale; was cashier role only
       // (2026-07-13) Prioritize active user for cashier; was stale localStorage
       cashier: modal.querySelector("#checkout-cashier-select")?.value || (Auth.currentUser()?.name) || localStorage.getItem("pos_cashier") || "Rosella",
+      // (2026-07-13) Normalize tableNumber & orderNumber to 1-2 digits (01-99); was 4-digit
+      tableNumber: tableInputVal ? String(parseInt(tableInputVal.replace(/\D/g, "").slice(-2), 10) || 1).padStart(2, "0") : (orderType === "Take-Out" ? String(parseInt(txnId.replace(/\D/g, "").slice(-2), 10) || 1).padStart(2, "0") : "01"),
+      orderType,
       // (2026-07-13) Multi-branch stamp on completed sale; was unbranchable
       branchId: DB.getCurrentBranchId ? DB.getCurrentBranchId() : "branch_main",
       branchName: DB.getCurrentBranch ? DB.getCurrentBranch()?.name : "Main Branch"
     };
     const sales = DB.getSales(); sales.unshift(sale); DB.setSales(sales);
+    if(DB.addKitchenOrder){
+      DB.addKitchenOrder({
+        saleId: sale.id,
+        orderNumber: String(parseInt((sale.receiptNo || "01").replace(/\D/g, "").slice(-2), 10) || 1).padStart(2, "0"),
+        tableNumber: sale.tableNumber,
+        orderType: sale.orderType,
+        cashier: sale.cashier,
+        items: sale.items.map(item => ({
+          name: item.name,
+          qty: item.qty,
+          price: item.price,
+          // (2026-07-13) Forward item flavor/add-on notes to KDS order; was omitted
+          notes: item.notes || "",
+          imageUrl: item.imageUrl || "",
+          category: item.category || ""
+        })),
+        branchId: sale.branchId
+      });
+    }
     // (2026-07-13) Queue offline sale only when disconnected; was always queuing
     if(DB.queueOfflineTransaction && !navigator.onLine) DB.queueOfflineTransaction(sale);
     if(activeHeldId){
@@ -959,8 +1393,9 @@ const POS = (() => {
     win.innerHTML = `
       <div class="receipt jk580h">
         <div class="center" style="margin-bottom:2px;">
-          <img src="logo.png" alt="Route 98" style="width:18mm;max-width:70px;height:auto;display:block;margin:0 auto 2px;">
-          <div class="bold brand-title" style="font-size:12.5px;font-weight:800;letter-spacing:0.02em;">${Utils.escapeHtml(settings.businessName || "Route 98")}</div>
+          <!-- (2026-07-13) Use burgerjay_logo.png & BurgerJay on thermal receipt; was Route 98 -->
+          <img src="burgerjay_logo.png" alt="BurgerJay" style="width:18mm;max-width:70px;height:auto;display:block;margin:0 auto 2px;">
+          <div class="bold brand-title" style="font-size:12.5px;font-weight:800;letter-spacing:0.02em;">${Utils.escapeHtml(settings.businessName || "BurgerJay")}</div>
           <div class="store-address" style="font-size:9px;line-height:1.2;">${Utils.escapeHtml(settings.address && settings.address !== "Cebu City, Philippines" ? settings.address : "Cabangcalan, Dakit, Bogo City, Cebu")}</div>
           <div style="font-size:8.5px;">VAT REG TIN: ${Utils.escapeHtml(settings.tin || "811-387-946-00000")}</div>
           <div class="bold" style="margin-top:2px;letter-spacing:0.04em;font-size:9.5px;font-weight:800;">THANKS FOR SHOPPING</div>
@@ -1056,6 +1491,8 @@ const POS = (() => {
         if(!t || (now - t) > oneMonth) return false;
       } else {
         const prodCatLower = (p.category || "").trim().toLowerCase();
+        // (2026-07-13) Hide raw ingredients from POS All tab unless selected; was mixed in
+        if(activeCatLower === "all" && (p.isRawIngredient || prodCatLower === "raw ingredients")) return false;
         const matchCat = activeCatLower === "all" || prodCatLower === activeCatLower;
         if(!matchCat) return false;
       }
@@ -1193,8 +1630,8 @@ const POS = (() => {
       return `
       <div class="product-card ${effectiveStock<=0?"oos":""} ${hasImg?"has-img":""}" data-id="${p.id}" role="button">
         <div class="thumb">
+          <!-- (2026-07-13) Omit stock number badge on POS product cards; was showing stock-tag -->
           ${Utils.productThumb(p, { iconSize:30 })}
-          <span class="stock-tag badge ${effectiveStock<=0?"badge-rust": effectiveStock<=p.lowStockThreshold ? "badge-amber":"badge-green"}">${stockBadgeText}</span>
         </div>
         <div class="info">
           ${p.brand ? `<span class="brand-lbl">${Utils.escapeHtml(p.brand)}</span>` : ""}
@@ -1286,6 +1723,9 @@ const POS = (() => {
       if(!p) return;
       if(p.piecesPerPack > 1){
         promptDualUnitSale(p, card);
+      } else if(needsFlavorPrompt(p)){
+        // (2026-07-13) Open flavor & add-on picker for fries/combos; was direct add
+        promptFlavorModifier(p, card);
       } else {
         if(addToCart(p, 1, "piece")){
           animateFlyToCart(card, p);
@@ -1444,8 +1884,11 @@ const POS = (() => {
         <div class="cart-line" data-prod-id="${l.productId}">
           <div class="thumb-sm">${Utils.productThumb({ ...l, category:l.category }, { iconSize:15 })}</div>
           <div class="info">
-            <div class="n">${Utils.escapeHtml(l.name)} ${l.unitType==="pack" ? `<span class="badge badge-brand text-xs" style="font-size:.62rem;padding:1px 5px;margin-left:2px;">PACK (${l.piecesPerPack})</span>` : ""}</div>
-            <div class="p">${Utils.money(l.price)} / ${l.unit}</div>
+            <div class="n">${Utils.escapeHtml(String(l.name || "").replace(/\s*\([^)]*\)/g, ""))} ${l.unitType==="pack" ? `<span class="badge badge-brand text-xs" style="font-size:.62rem;padding:1px 5px;margin-left:2px;">PACK (${l.piecesPerPack})</span>` : ""}</div>
+            <div class="p" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+              <span>${Utils.money(l.price)}</span>
+              ${l.notes ? `<button type="button" class="kds-item-flavor" data-edit-notes="${idx}" style="cursor:pointer;margin-top:0;" title="Tap to change flavor/notes">${Utils.escapeHtml(l.notes)}</button>` : (needsFlavorPrompt(l) ? `<button type="button" class="kds-item-flavor" data-edit-notes="${idx}" style="cursor:pointer;margin-top:0;background:var(--paper-dim);color:var(--ink-soft);border-color:var(--line);" title="Add flavor">+ Flavor</button>` : "")}
+            </div>
           </div>
           <div class="qty-stepper">
             <button data-dec="${idx}">${Icons.get("minus",{size:12})}</button>
@@ -1472,6 +1915,14 @@ const POS = (() => {
       el.querySelectorAll("[data-inc]").forEach(b=>b.onclick=()=>changeQty(Number(b.dataset.inc),1));
       el.querySelectorAll("[data-dec]").forEach(b=>b.onclick=()=>changeQty(Number(b.dataset.dec),-1));
       el.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>removeLine(Number(b.dataset.rm)));
+      // (2026-07-13) Bind cart line flavor/notes badge click to edit flavor; was static
+      el.querySelectorAll("[data-edit-notes]").forEach(b => {
+        b.onclick = (e) => {
+          e.stopPropagation();
+          const idx = Number(b.dataset.editNotes);
+          if(cart[idx]) promptFlavorModifier(cart[idx], null, idx);
+        };
+      });
       // Bind quantity input direct edit
       el.querySelectorAll(".qty-input").forEach(input => {
         input.addEventListener("change", (e) => {
@@ -1765,10 +2216,11 @@ const POS = (() => {
             </button>
           </div>
         </div>
-        <div class="category-chips" id="cat-chips"></div>
       </div>
       <div class="pos-layout" id="pos-layout">
         <div class="pos-catalog">
+          <!-- (2026-07-13) Place category-chips inside pos-catalog so Current Sale is taller; was in pos-sticky-header -->
+          <div class="category-chips" id="cat-chips"></div>
           <div class="product-grid" id="product-grid"></div>
           <!-- (2026-07-13) Compact pagination bar padding; was 6px -->
           <div class="pagination-bar" id="pos-pagination" style="display:none;margin-top:2px;padding:2px 2px;flex-shrink:0;"></div>

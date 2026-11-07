@@ -1,7 +1,7 @@
 {
-  "name": "route98-pos",
+  "name": "burgerjay-pos",
   "version": "1.0.0",
-  "description": "Route 98 POS and Business Management System",
+  "description": "BurgerJay POS and Kitchen Display System",
   "main": "index.html",
   "scripts": {
     "build": "node scripts/build.js",

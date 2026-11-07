@@ -14,11 +14,14 @@
   --line:         #E1E5F2;
   --line-strong:  #CBD1E8;
 
-  /* ---- Brand: Royal Blue ---- */
-  --brand:       #2F42D8;
-  --brand-deep:  #1E2C9C;
-  --brand-bright:#5C74FF;
-  --brand-tint:  #E9ECFC;
+  /* (2026-07-13) Set BurgerJay red & yellow brand tokens; was Royal Blue */
+  /* ---- Brand: BurgerJay Red & Gold ---- */
+  --brand:       #C5161D;
+  --brand-deep:  #7D0E13;
+  --brand-bright:#E0262E;
+  --brand-tint:  #FDF2F2;
+  --brand-gold:  #F5B800;
+  --brand-gold-tint: #FEF9EB;
 
   /* ---- Semantic ---- */
   --success:      #16A870;
@@ -68,7 +71,8 @@
   --shadow-sm: 0 1px 2px rgba(23,27,46,.06), 0 1px 1px rgba(23,27,46,.04);
   --shadow-md: 0 6px 18px rgba(31,44,120,.10), 0 2px 5px rgba(31,44,120,.06);
   --shadow-lg: 0 16px 40px rgba(23,27,46,.18);
-  --shadow-brand: 0 8px 20px rgba(47,66,216,.28);
+  /* (2026-07-13) Update brand shadow to crimson red; was blue rgba(47,66,216) */
+  --shadow-brand: 0 8px 20px rgba(197,22,29,.28);
 
   /* (2026-07-13) Tighten shell dimensions for spacious feel; was 232px/58px */
   /* ---- Layout ---- */
@@ -90,7 +94,8 @@
   --line:         #262C44;
   --line-strong:  #363E5C;
 
-  --brand-tint:  #1B2050;
+  /* (2026-07-13) Set dark mode brand tint to deep burgundy; was #1B2050 */
+  --brand-tint:  #2E0C0E;
   --success-tint: #0E2A22;
   --warning-tint: #35270F;
   --danger-tint: #3A181A;

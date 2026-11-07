@@ -4,9 +4,10 @@
 // ever pushes a snapshot of what's already safely on disk.
 // ============================================================
 const DB = (() => {
-  const NS = "mm_"; // minimart namespace
-  // (2026-07-13) Add cashiers key and defaults; was hardcoded in checkout
-  const DEFAULT_CASHIERS = ["Rosella", "Niño"];
+  // (2026-07-13) Set BurgerJay storage namespace; was minimart mm_
+  const NS = "bj_"; // burgerjay namespace
+  // (2026-07-13) Empty default cashiers for BurgerJay; was Rosella and Niño
+  const DEFAULT_CASHIERS = [];
   const KEYS = {
     products: NS+"products", categories: NS+"categories", sales: NS+"sales",
     fuelSales: NS+"fuelSales", fuelConfig: NS+"fuelConfig", settings: NS+"settings",
@@ -22,12 +23,14 @@ const DB = (() => {
     shiftLogs: NS+"shiftLogs", deletedShiftLogIds: NS+"deletedShiftLogIds", syncBaseline: NS+"syncBaseline",
     // (2026-07-13) Multi-branch support keys; was single store
     branches: NS+"branches", currentBranchId: NS+"currentBranchId",
+    // (2026-07-13) Add kitchenOrders storage key; was missing
+    kitchenOrders: NS+"kitchenOrders",
     // (2026-07-13) Product trash bin; 30-day soft-delete before permanent removal
     trash: NS+"trash"
   };
 
-  // (2026-07-13) Move queues & snapshots to IndexedDB; was localStorage only
-  const IDB_NAME = "minimart_pos_idb";
+  // (2026-07-13) Set BurgerJay IndexedDB store name; was minimart_pos_idb
+  const IDB_NAME = "burgerjay_pos_idb";
   const IDB_STORE = "kv_store";
   const IDB_ONLY_KEYS = new Set([KEYS.backups, KEYS.syncBaseline, KEYS.offlineQueue, KEYS.trash]);
   let idbInstance = null;
@@ -210,7 +213,8 @@ const DB = (() => {
     };
     window.addEventListener("storage", (e) => onRemoteChange(e.key));
     if(typeof BroadcastChannel !== "undefined"){
-      crossTabSync = new BroadcastChannel("mm_split_screen_channel");
+      // (2026-07-13) Isolate BurgerJay BroadcastChannel from Route98; was mm_
+      crossTabSync = new BroadcastChannel("bj_split_screen_channel");
       crossTabSync.onmessage = (e) => onRemoteChange(e.data?.key);
     }
   }
@@ -280,28 +284,30 @@ const DB = (() => {
   function categoryIcon(cat){ return CATEGORY_ICON[cat] || "package"; }
 
   // ---------- defaults ----------
-  const DEFAULT_CATEGORIES = ["Misc"];
+  // (2026-07-13) Seed default BurgerJay categories including DRINKS; was 5 cats
+  const DEFAULT_CATEGORIES = ["BURGERS", "COMBOS", "FRIES", "HOTDOGS", "DRINKS", "ADD-ONS"];
 
-  // (2026-07-13) Update default address to Bogo City; was Cebu City
+  // (2026-07-13) Set default settings for BurgerJay; was Route 98
   const DEFAULT_SETTINGS = {
-    businessName: "Route 98",
+    businessName: "BurgerJay",
     address: "Cabangcalan, Dakit, Bogo City, Cebu",
-    // (2026-07-13) Set default Route 98 TIN; was empty
     tin: "811-387-946-00000",
-    receiptFooter: "Salamat sa inyong pagbisita sa Route 98! Come again",
+    receiptFooter: "Salamat sa inyong pagbisita sa BurgerJay! Come again",
     currencySymbol: "₱",
     vatEnabled: true,
     vatRate: 12,
     theme: "light",
     lowStockThreshold: 5,
+    // (2026-07-13) Set BurgerJay burgerjay-bogo Firebase config; was blank/route98
     firebaseConfig: {
-      apiKey: "AIzaSyA79noblcXcY2rhe4VmK3vHUnzXqRhl4w8",
-      authDomain: "route98-bogo.firebaseapp.com",
-      projectId: "route98-bogo",
-      storageBucket: "route98-bogo.firebasestorage.app",
-      messagingSenderId: "177232035309",
-      appId: "1:177232035309:web:87fa8430b141e7afb97be4",
-      databaseURL: "https://route98-bogo-default-rtdb.firebaseio.com"
+      apiKey: "AIzaSyBekg9E5Mf73kK74_kpyd8DN4Nd4OcliKo",
+      authDomain: "burgerjay-bogo.firebaseapp.com",
+      databaseURL: "https://burgerjay-bogo-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "burgerjay-bogo",
+      storageBucket: "burgerjay-bogo.firebasestorage.app",
+      messagingSenderId: "392777396149",
+      appId: "1:392777396149:web:f1ff3febefd58cb43333fc",
+      measurementId: "G-N6YRDNVZ97"
     },
     autoSync: true,
     // (2026-07-13) Default autoPrintReceipt to true; was unset in defaults
@@ -313,14 +319,9 @@ const DB = (() => {
     lastView: "pos"
   };
 
-  // (2026-07-13) Set Owner/Admin PIN to 9898 matching Firestore; was 1234
+  // (2026-07-13) Keep only default Owner/Admin account; removed Route98 staff
   const DEFAULT_USERS = [
-    { id:"u_admin",   name:"Owner/Admin",   role:"admin",   pin:"9898" },
-    { id:"u_jp",      name:"JP",            role:"admin",   pin:"3333" },
-    { id:"u_sharon",  name:"Sharon",        role:"admin",   pin:"4444" },
-    { id:"u_ike",     name:"Elaicka / Ike", role:"admin",   pin:"5555" },
-    { id:"u_rosella", name:"Rosella",       role:"cashier", pin:"1111" },
-    { id:"u_nino",    name:"Niño",          role:"cashier", pin:"2222" }
+    { id:"u_admin", name:"Owner/Admin", role:"admin", pin:"9898" }
   ];
 
   // (2026-07-13) Set Regular (Gas) fuel name & changeable tanker cost; was Gasoline
@@ -337,47 +338,107 @@ const DB = (() => {
     }
   };
 
-  // (2026-07-13) Migrate storage to IDB on DB.init; was localStorage only
+  // (2026-07-13) Import BurgerJay menu items from CATALOG_SEED; was blank reset
+  function ensureBurgerJayCatalogSeeded(){
+    if(typeof CATALOG_SEED === "undefined" || !Array.isArray(CATALOG_SEED.products) || !CATALOG_SEED.products.length) return false;
+    const curProds = read(KEYS.products, []) || [];
+    const curCats = read(KEYS.categories, []) || [];
+    const deletedSet = new Set((read(KEYS.deletedProductIds, []) || []).map(x => String(x || "").trim()));
+    const prodMap = new Map();
+    curProds.forEach(p => { if(p && p.id) prodMap.set(String(p.id), p); });
+    let changed = false;
+    const isFirstImport = !localStorage.getItem(NS + "assets_menu_imported_v1");
+    CATALOG_SEED.products.forEach(seedItem => {
+      const sid = String(seedItem.id);
+      if(!isFirstImport && deletedSet.has(sid)) return;
+      const existing = prodMap.get(sid);
+      if(!existing){
+        prodMap.set(sid, { ...seedItem });
+        changed = true;
+      } else if(isFirstImport || (!existing.imageUrl && seedItem.imageUrl) || ((!Array.isArray(existing.choices) || !existing.choices.length) && Array.isArray(seedItem.choices) && seedItem.choices.length)){
+        prodMap.set(sid, {
+          ...existing,
+          ...seedItem,
+          stock: existing.stock ?? seedItem.stock,
+          choices: (Array.isArray(existing.choices) && existing.choices.length) ? existing.choices : (seedItem.choices || [])
+        });
+        changed = true;
+      }
+    });
+    const catSet = new Set(curCats.map(c => String(c || "").trim().toUpperCase()).filter(Boolean));
+    (CATALOG_SEED.categories || DEFAULT_CATEGORIES).forEach(c => {
+      const uc = String(c || "").trim().toUpperCase();
+      if(uc && !catSet.has(uc)){
+        catSet.add(uc);
+        changed = true;
+      }
+    });
+    if(changed || isFirstImport){
+      if(isFirstImport){
+        write(KEYS.deletedProductIds, []);
+        try{ localStorage.setItem(NS + "assets_menu_imported_v1", "true"); }catch(e){}
+      }
+      write(KEYS.categories, Array.from(catSet));
+      write(KEYS.products, Array.from(prodMap.values()));
+      return true;
+    }
+    return false;
+  }
+
   function init(){
+    // (2026-07-13) One-time blank slate reset for non-menu sales/orders; was wiping catalog
+    const blankFlagKey = NS + "blank_database_reset_v2";
+    if(!localStorage.getItem(blankFlagKey)){
+      [
+        KEYS.products, KEYS.categories, KEYS.sales, KEYS.kitchenOrders,
+        KEYS.expenses, KEYS.shifts, KEYS.stockLog, KEYS.restockLogs,
+        KEYS.voidLogs, KEYS.heldSales, KEYS.cart, KEYS.customItems,
+        KEYS.deletedProductIds, KEYS.deletedSaleIds, KEYS.fuelSales, KEYS.venueBookings
+      ].forEach(k => {
+        if(!k) return;
+        write(k, []);
+      });
+      try{ localStorage.setItem(blankFlagKey, "true"); }catch(e){}
+    }
     migrateAndPruneStorage();
-    idbLoadAll();
+    ensureBurgerJayCatalogSeeded();
+    idbLoadAll().then(() => {
+      if(ensureBurgerJayCatalogSeeded()){
+        if(typeof POS !== "undefined" && POS.renderCatalog) POS.renderCatalog();
+        if(typeof Inventory !== "undefined" && Inventory.renderTable) Inventory.renderTable();
+      }
+    });
     if(read(KEYS.categories) === null) write(KEYS.categories, DEFAULT_CATEGORIES);
-    // (2026-07-13) Auto-set default Firebase config in stored settings; was unconfigured
+    // (2026-07-13) Sync full burgerjay-bogo Firebase config in settings; was partial
     const curSettings = read(KEYS.settings);
     if(curSettings === null){
       write(KEYS.settings, DEFAULT_SETTINGS);
-    } else if(!curSettings.firebaseConfig){
+    } else if(!curSettings.firebaseConfig || curSettings.firebaseConfig.projectId !== "burgerjay-bogo" || !curSettings.firebaseConfig.measurementId || !curSettings.firebaseConfig.databaseURL){
       curSettings.firebaseConfig = DEFAULT_SETTINGS.firebaseConfig;
       curSettings.autoSync = true;
       write(KEYS.settings, curSettings);
     }
-    // (2026-07-13) Ensure all default staff exist; was wiping non-cashier roles
+    // (2026-07-13) Strip Route98 staff and keep only Owner/Admin; was seeding Route98 staff
+    const LEGACY_R98_IDS = new Set(["u_jp", "u_sharon", "u_ike", "u_rosella", "u_nino"]);
+    const LEGACY_R98_NAMES = new Set(["cashier", "jp", "sharon", "elaicka / ike", "rosella", "niño", "nino"]);
     let curUsers = read(KEYS.users);
     if(curUsers === null){
       write(KEYS.users, DEFAULT_USERS);
     } else {
       let uChanged = false;
-      // Remove generic placeholder
-      if(curUsers.some(u => u.name.toLowerCase() === "cashier")){
-        curUsers = curUsers.filter(u => u.name.toLowerCase() !== "cashier");
+      const filteredUsers = curUsers.filter(u => {
+        const uid = String(u?.id || "").trim();
+        const nm = String(u?.name || "").trim().toLowerCase();
+        return !LEGACY_R98_IDS.has(uid) && !LEGACY_R98_NAMES.has(nm);
+      });
+      if(filteredUsers.length !== curUsers.length){
+        curUsers = filteredUsers;
         uChanged = true;
       }
-      // (2026-07-13) Seed staff with 9898 admin PIN; was 1234
-      const STAFF_SEEDS = [
-        { id:"u_admin",   name:"Owner/Admin",   role:"admin",   pin:"9898" },
-        { id:"u_jp",      name:"JP",            role:"admin",   pin:"3333" },
-        { id:"u_sharon",  name:"Sharon",        role:"admin",   pin:"4444" },
-        { id:"u_ike",     name:"Elaicka / Ike", role:"admin",   pin:"5555" },
-        { id:"u_rosella", name:"Rosella",       role:"cashier", pin:"1111" },
-        { id:"u_nino",    name:"Niño",          role:"cashier", pin:"2222" }
-      ];
-      STAFF_SEEDS.forEach(seed => {
-        const nm = seed.name.toLowerCase();
-        if(!curUsers.some(u => u.name.toLowerCase() === nm)){
-          curUsers.push(seed);
-          uChanged = true;
-        }
-      });
+      if(!curUsers.some(u => u.id === "u_admin" || String(u?.name || "").toLowerCase() === "owner/admin")){
+        curUsers.unshift({ id:"u_admin", name:"Owner/Admin", role:"admin", pin:"9898" });
+        uChanged = true;
+      }
       const adminAcc = curUsers.find(u => u.id === "u_admin" || u.name.toLowerCase() === "owner/admin");
       if(adminAcc && adminAcc.pin === "1234"){
         adminAcc.pin = "9898";
@@ -411,61 +472,10 @@ const DB = (() => {
       });
       if(changed) write(KEYS.fuelConfig, curFuelCfg);
     }
-    // (2026-07-13) Clean & sync new Loyverse catalog & sales; was stale state
-    const seedCatalog = (typeof CATALOG_SEED !== "undefined" && CATALOG_SEED.products) ? CATALOG_SEED : null;
-    // (2026-07-13) Restore seedSales variable in DB init; was accidentally removed
-    const seedSales = (typeof SALES_SEED !== "undefined" && Array.isArray(SALES_SEED)) ? SALES_SEED : [];
-    // (2026-07-13) Sync Loyverse merge v20 with Sept 25 - Oct 4; was v19
-    const syncFlagKey = NS + "loyverse_sync_20261014_v20";
-
-    if(!localStorage.getItem(syncFlagKey)){
-      if(seedCatalog){
-        // (2026-07-13) Prevent seed catalog re-adding deleted items; was un-checked
-        const curProds = read(KEYS.products) || [];
-        const delProdIds = getDeletedProductIds();
-        const pMap = new Map();
-        curProds.forEach(p => { if(p && p.id && !delProdIds.has(String(p.id).trim())) pMap.set(p.id, p); });
-        seedCatalog.products.forEach(p => {
-          const pId = String(p?.id || "").trim();
-          if(!pId || delProdIds.has(pId)) return;
-          if(pMap.has(p.id)){
-            const ex = pMap.get(p.id);
-            pMap.set(p.id, { ...ex, ...p, imageUrl: p.imageUrl || ex.imageUrl });
-          } else {
-            pMap.set(p.id, p);
-          }
-        });
-        write(KEYS.products, Array.from(pMap.values()));
-        if(seedCatalog.categories && seedCatalog.categories.length){
-          const curCats = new Set([...(read(KEYS.categories) || []), ...seedCatalog.categories]);
-          write(KEYS.categories, Array.from(curCats));
-        }
-      }
-      const existingSales = read(KEYS.sales) || [];
-      const sMap = new Map();
-      existingSales.forEach(s => {
-        const k = String(s.receiptNo || s.id || '').replace(/^TXN-/, '').trim();
-        if(k) sMap.set(k, s);
-      });
-      seedSales.forEach(s => {
-        const k = String(s.receiptNo || s.id || '').replace(/^TXN-/, '').trim();
-        if(k){
-          const existing = sMap.get(k);
-          if(existing){
-            sMap.set(k, { ...existing, ...s, items: (s.items && s.items.length) ? s.items : existing.items, id: s.id || existing.id });
-          } else {
-            sMap.set(k, s);
-          }
-        }
-      });
-      const mergedList = Array.from(sMap.values()).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-      write(KEYS.sales, mergedList.length ? mergedList : seedSales);
-      try{ localStorage.setItem(syncFlagKey, "true"); }catch(e){}
-    } else {
-      if(read(KEYS.products) === null) write(KEYS.products, seedCatalog ? seedCatalog.products : []);
-      const curSales = read(KEYS.sales);
-      if(!curSales || !curSales.length) write(KEYS.sales, seedSales);
-    }
+    // (2026-07-13) Initialize blank products and sales if null; was merging Loyverse seed
+    if(read(KEYS.products) === null) write(KEYS.products, []);
+    if(read(KEYS.sales) === null) write(KEYS.sales, []);
+    if(read(KEYS.kitchenOrders) === null) write(KEYS.kitchenOrders, []);
     // (2026-07-13) Repair sales totals & normalize timestamps; was zero-only check
     const currentSales = read(KEYS.sales) || [];
     let salesRepaired = false;
@@ -489,17 +499,28 @@ const DB = (() => {
     if(read(KEYS.heldSales) === null) write(KEYS.heldSales, []);
     if(read(KEYS.venueLeads) === null) write(KEYS.venueLeads, []);
     if(read(KEYS.stockLog) === null) write(KEYS.stockLog, []);
-    if(read(KEYS.cashiers) === null) write(KEYS.cashiers, DEFAULT_CASHIERS);
+    // (2026-07-13) Strip Route98 cashiers from stored cashiers list; was keeping Rosella/Niño
+    const curCashiers = read(KEYS.cashiers);
+    if(curCashiers === null){
+      write(KEYS.cashiers, DEFAULT_CASHIERS);
+    } else if(Array.isArray(curCashiers)){
+      const cleanCashiers = curCashiers.filter(c => !LEGACY_R98_NAMES.has(String(c || "").trim().toLowerCase()));
+      if(cleanCashiers.length !== curCashiers.length) write(KEYS.cashiers, cleanCashiers);
+    }
     // (2026-07-13) Default closed shift state; was dummy open timestamp
     if(read(KEYS.shift) === null) write(KEYS.shift, { status: "closed", openedAt: null, openingCash: 0 });
     if(read(KEYS.syncMeta) === null) write(KEYS.syncMeta, { lastSynced:null, status:"idle" });
     // merge in any NEW default settings keys added in later app versions without clobbering user edits
     const s = read(KEYS.settings);
     const updatedSettings = { ...DEFAULT_SETTINGS, ...s };
-    // (2026-07-13) Migrate address to Bogo City; was Cebu City, Philippines
-    if(updatedSettings.businessName === "The Good Minimart" || !updatedSettings.businessName){
-      updatedSettings.businessName = "Route 98";
-      updatedSettings.receiptFooter = "Salamat sa inyong pagbisita sa Route 98! Come again";
+    // (2026-07-13) Set BurgerJay business name and receipt footer; was Route 98
+    if(updatedSettings.businessName === "The Good Minimart" || updatedSettings.businessName === "Route 98" || !updatedSettings.businessName){
+      updatedSettings.businessName = "BurgerJay";
+      updatedSettings.receiptFooter = "Salamat sa inyong pagbisita sa BurgerJay! Come again";
+    }
+    // (2026-07-13) Ensure burgerjay-bogo Firebase config is applied; was empty/route98
+    if(!updatedSettings.firebaseConfig || !updatedSettings.firebaseConfig.projectId || updatedSettings.firebaseConfig.projectId === "route98-bogo"){
+      updatedSettings.firebaseConfig = { ...DEFAULT_SETTINGS.firebaseConfig };
     }
     if(!updatedSettings.address || updatedSettings.address === "Cebu City, Philippines"){
       updatedSettings.address = "Cabangcalan, Dakit, Bogo City, Cebu";
@@ -595,6 +616,7 @@ const DB = (() => {
           if(p.packPrice !== undefined) existing.packPrice = p.packPrice;
           if(p.packCost !== undefined) existing.packCost = p.packCost;
           if(p.packBarcode !== undefined) existing.packBarcode = p.packBarcode;
+          if(Array.isArray(p.choices)) existing.choices = p.choices;
           if(p.stock !== undefined && !isNaN(Number(p.stock))) existing.stock = Number(p.stock);
           if(p.updatedAt) existing.updatedAt = p.updatedAt;
         } else {
@@ -838,14 +860,74 @@ const DB = (() => {
   const getSettings    = () => read(KEYS.settings, DEFAULT_SETTINGS);
   // (2026-07-13) Attach updatedAt to settings writes; was untracked
   const setSettings    = (v) => write(KEYS.settings, { ...v, updatedAt: v?.updatedAt || Date.now() });
-  const getUsers       = () => read(KEYS.users, DEFAULT_USERS);
-  const setUsers       = (v) => write(KEYS.users, v);
-  // (2026-07-13) Cashier roster fetched from users role=cashier; was raw list
+  // (2026-07-13) Always filter out Route98 staff and cashiers in getters/setters; was raw read
+  const R98_BANNED_IDS = new Set(["u_jp", "u_sharon", "u_ike", "u_rosella", "u_nino"]);
+  const R98_BANNED_NAMES = new Set(["cashier", "jp", "sharon", "elaicka / ike", "rosella", "niño", "nino"]);
+  const cleanUsersList = (arr) => (Array.isArray(arr) ? arr : []).filter(u => {
+    const uid = String(u?.id || "").trim();
+    const nm = String(u?.name || "").trim().toLowerCase();
+    return !R98_BANNED_IDS.has(uid) && !R98_BANNED_NAMES.has(nm);
+  });
+  const cleanCashiersList = (arr) => (Array.isArray(arr) ? arr : []).filter(c => {
+    const nm = String(c || "").trim().toLowerCase();
+    return nm && !R98_BANNED_NAMES.has(nm);
+  });
+  const getUsers       = () => {
+    const raw = read(KEYS.users, DEFAULT_USERS);
+    const cleaned = cleanUsersList(raw);
+    if(Array.isArray(raw) && cleaned.length !== raw.length) write(KEYS.users, cleaned);
+    return cleaned.length ? cleaned : DEFAULT_USERS;
+  };
+  const setUsers       = (v) => write(KEYS.users, cleanUsersList(v));
   const getCashiers    = () => {
     const cu = getUsers().filter(u => u.role === "cashier").map(u => u.name);
-    return cu.length ? cu : DEFAULT_CASHIERS;
+    const rawStored = read(KEYS.cashiers, DEFAULT_CASHIERS);
+    const cleanedStored = cleanCashiersList(rawStored);
+    if(Array.isArray(rawStored) && cleanedStored.length !== rawStored.length) write(KEYS.cashiers, cleanedStored);
+    return cu.length ? cu : cleanedStored;
   };
-  const setCashiers    = (v) => write(KEYS.cashiers, Array.isArray(v) && v.length ? v : DEFAULT_CASHIERS);
+  const setCashiers    = (v) => write(KEYS.cashiers, cleanCashiersList(v));
+  // (2026-07-13) Manage kitchen display orders; was missing
+  const getKitchenOrders = () => read(KEYS.kitchenOrders, []);
+  const setKitchenOrders = (v) => write(KEYS.kitchenOrders, Array.isArray(v) ? v : []);
+  const addKitchenOrder = (order) => {
+    const list = getKitchenOrders();
+    const branchId = getCurrentBranchId ? getCurrentBranchId() : "branch_main";
+    const newOrder = {
+      id: order.id || ("kord_" + Date.now() + "_" + Math.floor(Math.random()*1000)),
+      saleId: order.saleId || null,
+      orderNumber: order.orderNumber || (list.length + 1),
+      tableNumber: order.tableNumber || "",
+      orderType: order.orderType || "Dine-In",
+      cashier: order.cashier || (typeof Auth !== "undefined" && Auth.currentUser ? Auth.currentUser()?.name : "Cashier"),
+      timestamp: order.timestamp || Date.now(),
+      status: order.status || "new",
+      statusHistory: order.statusHistory || [{ status: "new", ts: Date.now() }],
+      items: order.items || [],
+      notes: order.notes || "",
+      branchId: order.branchId || branchId
+    };
+    list.unshift(newOrder);
+    setKitchenOrders(list);
+    return newOrder;
+  };
+  const updateKitchenOrderStatus = (orderId, newStatus) => {
+    const list = getKitchenOrders();
+    const idx = list.findIndex(o => o.id === orderId);
+    if(idx !== -1){
+      list[idx].status = newStatus;
+      if(!list[idx].statusHistory) list[idx].statusHistory = [];
+      list[idx].statusHistory.push({ status: newStatus, ts: Date.now() });
+      setKitchenOrders(list);
+      return list[idx];
+    }
+    return null;
+  };
+  const clearCompletedKitchenOrders = () => {
+    const list = getKitchenOrders().filter(o => o.status !== "completed");
+    setKitchenOrders(list);
+    return list;
+  };
   const getHeldSales   = () => read(KEYS.heldSales, []);
   const setHeldSales   = (v) => write(KEYS.heldSales, v);
   const getVenueLeads  = () => read(KEYS.venueLeads, []);
@@ -993,21 +1075,21 @@ const DB = (() => {
       }
     }
   }
-  // (2026-07-13) Persistent unique device identifier; was unexposed helper
+  // (2026-07-13) Use BurgerJay bj_deviceId and bj_terminalTag; was mm_
   function getDeviceId(){
-    let deviceId = localStorage.getItem("mm_deviceId");
+    let deviceId = localStorage.getItem("bj_deviceId");
     if(!deviceId){
       deviceId = "device_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem("mm_deviceId", deviceId);
+      localStorage.setItem("bj_deviceId", deviceId);
     }
     return deviceId;
   }
   function getNextTransactionId(prefix = "TXN"){
-    let devId = localStorage.getItem("mm_terminalTag");
+    let devId = localStorage.getItem("bj_terminalTag");
     if(!devId){
       const raw = getDeviceId();
       devId = raw.replace(/[^a-zA-Z0-9]/g, "").slice(-3).toUpperCase();
-      localStorage.setItem("mm_terminalTag", devId);
+      localStorage.setItem("bj_terminalTag", devId);
     }
     const sales = read(KEYS.sales, []);
     const fuelSales = read(KEYS.fuelSales, []);
@@ -1799,7 +1881,7 @@ const DB = (() => {
     return {
       products:getProducts(), categories:getCategories(), sales:getSales(), fuelSales:getFuelSales(),
       fuelConfig:getFuelConfig(), fuelDeliveries:getFuelDeliveries(), settings:getSettings(), users:getUsers(),
-      heldSales:getHeldSales(), venueLeads:getVenueLeads(), bookings:getBookings(),
+      heldSales:getHeldSales(), kitchenOrders:getKitchenOrders(), venueLeads:getVenueLeads(), bookings:getBookings(),
       restaurantBookings:getRestaurantBookings(), expenses:getExpenses(),
       stockLog:getStockLog(), restockLogs:getRestockLogs(), physicalAudits:getPhysicalAudits(),
       // (2026-07-13) Include backup metadata in snapshot; was hardcoded empty array
@@ -1920,6 +2002,8 @@ const DB = (() => {
     if(snap.users) setUsers(snap.users);
     if(snap.cashiers) setCashiers(snap.cashiers);
     if(snap.heldSales) setHeldSales(snap.heldSales);
+    // (2026-07-13) Restore kitchenOrders from snapshot; was omitted
+    if(snap.kitchenOrders && Array.isArray(snap.kitchenOrders)) setKitchenOrders(snap.kitchenOrders);
     if(snap.venueLeads) setVenueLeads(snap.venueLeads);
     if(snap.bookings) setBookings(snap.bookings);
     if(snap.restaurantBookings) setRestaurantBookings(snap.restaurantBookings);
@@ -2048,6 +2132,8 @@ const DB = (() => {
     getSettings, setSettings,
     getUsers, setUsers,
     getCashiers, setCashiers,
+    // (2026-07-13) Export kitchen order management methods; was missing
+    getKitchenOrders, setKitchenOrders, addKitchenOrder, updateKitchenOrderStatus, clearCompletedKitchenOrders,
     getHeldSales, setHeldSales,
     getVenueLeads, setVenueLeads,
     getStockLog, setStockLog,

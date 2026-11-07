@@ -1,11 +1,12 @@
 Add-Type -AssemblyName System.Drawing
 
 $rootDir = Split-Path -Parent $PSScriptRoot
-$srcLogoPath = Join-Path $rootDir "route98_logo.png"
+# (2026-07-13) Use burgerjay_logo.png for icon generation; was route98_logo.png
+$srcLogoPath = Join-Path $rootDir "burgerjay_logo.png"
 $resDir = Join-Path $rootDir "android\app\src\main\res"
 
 if (-not (Test-Path $srcLogoPath)) {
-    Write-Error "route98_logo.png not found at $srcLogoPath"
+    Write-Error "burgerjay_logo.png not found at $srcLogoPath"
     exit 1
 }
 

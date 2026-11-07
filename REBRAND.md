@@ -1,190 +1,119 @@
-# Minimart POS Rebranding & Dark Green Theme Plan
+# BurgerJay POS & KDS — Complete Rebrand & Database Transfer Guide
 
-This document is a comprehensive guide to rebranding this POS application from the current **Royal Blue ("Royal Counter")** brand into a **Dark Green ("Emerald Counter")** brand identity (or any other minimart theme in the future).
-
----
-
-## 1. Design System Architecture
-
-The application styling follows a centralized CSS Token architecture defined primarily in `css/tokens.css`, but also has component styles in `css/base.css`, `css/views.css`, and localized inline styles in key JavaScript view modules (`js/app.js`, `js/auth.js`, `js/pos.js`, `js/gasoline.js`, `js/shift.js`, and `js/venue.js`).
-
-To rebrand successfully without breaking UI contrast, you need to update:
-1. **CSS Design Tokens** (`css/tokens.css`)
-2. **Hardcoded CSS Brand Classes & Accent Overrides** (`css/base.css`, `css/views.css`, `css/mobile-fixes.css`)
-3. **Hardcoded Inline Colors in JavaScript** (`js/gasoline.js`, `js/venue.js`, `js/shift.js`, `js/reports.js`)
-4. **App Metadata & Business Profile** (`js/db.js`, `index.html`, `manifest.json`, `sw.js`)
-5. **Brand Graphic Assets & Icons** (`route98_logo.png`, `logo.png`, `icon.png`, favicons)
+This document records the complete transfer and rebranding process from **Route98 POS** into **BurgerJay POS & Kitchen Display System (KDS)**, including visual identity, fast-food burger station workflows, staff/cashier cleanup, menu asset import, database isolation, Firebase setup, Android/PWA configuration, and Git safety verification.
 
 ---
 
-## 2. Dark Green Palette Tokens (Drop-in Replacement)
+## 1. Brand Identity & Color Tokens (`css/tokens.css`, `css/base.css`, `css/views.css`, `css/mobile-fixes.css`)
+
+Replaced the previous Emerald Green / Royal Blue palette with the **BurgerJay Crimson Red & Gold** palette inspired by the BurgerJay mascot logo:
 
 ### Light Mode (`:root` in `css/tokens.css`)
-| Token Name | Current Value (Royal Blue) | Rebrand Value (Dark Green) | Role / Usage |
-|---|---|---|---|
-| `--brand` | `#2F42D8` | `#0A6C3E` (or `#0F5132`) | Primary action buttons, active navigation indicator, focus outlines |
-| `--brand-deep` | `#1E2C9C` | `#074526` | Hero figures, bold price labels, high-contrast totals, active state text |
-| `--brand-bright` | `#5C74FF` | `#10B981` (Emerald-500) | Secondary highlight accents, badges, interactive toggles |
-| `--brand-tint` | `#E9ECFC` | `#E6F7EF` (Mint Ice) | Background tint for active table rows, cart thumbnails, selected pills |
-| `--shadow-brand` | `0 8px 20px rgba(47,66,216,.28)` | `0 8px 20px rgba(10,108,62,.24)` | Drop-shadow under primary checkout buttons and modals |
-| `--paper` | `#F5F7FC` | `#F4F8F5` | Main viewport background with subtle cool sage undertone |
-| `--paper-dim` | `#ECF0FA` | `#E9F1EC` | Inactive table headers, card borders, subtle chip fills |
-| `--paper-raised` | `#FFFFFF` | `#FFFFFF` | Pure white surface for cards, modals, drawer inputs |
-| `--line` | `#E1E5F2` | `#D8E5DD` | Primary hairline separators and table row borders |
-| `--line-strong` | `#CBD1E8` | `#BED1C6` | Form input borders and card dividers |
+| Token Name | BurgerJay Value | Role / Usage |
+|---|---|---|
+| `--brand` | `#C5161D` | Primary BurgerJay Crimson Red (buttons, active nav, badges) |
+| `--brand-deep` | `#7D0E13` | Deep Crimson (hero figures, prices, active labels, headings) |
+| `--brand-bright` | `#F5B800` | BurgerJay Golden Yellow (highlights, secondary accents) |
+| `--brand-gold` | `#D4971A` | Warm Gold border and badge accent |
+| `--brand-tint` | `#FDECEC` | Soft Warm Blush tint for active rows, pills, and selected states |
+| `--shadow-brand` | `0 8px 20px rgba(197,22,29,.26)` | Crimson glow shadow under primary checkout and KDS actions |
+| `--paper` | `#FAF6F5` | Main background with warm cream undertone |
+| `--paper-dim` | `#F3ECEA` | Subtle card header and chip surface |
+| `--paper-raised` | `#FFFFFF` | Pure white card, slip, and modal surface |
+| `--line` | `#E8DCD9` | Hairline borders and dividers |
+| `--line-strong` | `#D6C3BE` | Input and card outlines |
 
 ### Dark Mode (`[data-theme="dark"]` in `css/tokens.css`)
-| Token Name | Current Value (Royal Blue) | Rebrand Value (Dark Green) | Role / Usage |
-|---|---|---|---|
-| `--paper` | `#10131F` | `#0C1410` | Dark mode main background |
-| `--paper-raised` | `#171B2C` | `#121E18` | Dark mode card & modal backgrounds |
-| `--paper-dim` | `#0C0F19` | `#080E0B` | Dark mode sunken surfaces |
-| `--brand-tint` | `#1B2050` | `#132B20` | Subtle green tint behind active dark-mode elements |
-| `--line` | `#262C44` | `#1E3328` | Hairlines in dark mode |
-| `--line-strong` | `#363E5C` | `#2B4738` | Strong outlines in dark mode |
-
----
-
-## 3. CSS Classes & Specific Elements to Update
-
-### A. Global & Navigation (`css/base.css`)
-- `.brand-text strong`:
-  - Current: `color: #182B68;` (Dark mode: `#AFC0FF;`)
-  - Change to: `color: var(--brand-deep);` or `#074526;` (Dark mode: `#A7F3D0;`)
-- `.nav-btn.active`:
-  - Current: `background: linear-gradient(90deg, var(--brand-tint), transparent); color: var(--brand-deep); border-left-color: var(--brand);`
-  - Dark mode: Change `color: #AFC0FF;` to `color: #A7F3D0;`
-- `.btn-primary`:
-  - Uses `background: var(--brand);` (will automatically inherit `#0A6C3E`)
-- `.badge-brand`:
-  - Uses `background: var(--brand-tint); color: var(--brand-deep);`
-- `::selection`:
-  - Change highlight color from blue tint to `rgba(16, 185, 129, 0.25)`
-
-### B. POS & Cart Management (`css/views.css`)
-- `.pos-search-wrap .input:focus`:
-  - `border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint);`
-- `.product-card .price`:
-  - `color: var(--brand-deep);`
-- `.product-card.custom-charge-card`:
-  - `border: 1.5px dashed var(--brand); background: color-mix(in srgb, var(--brand-tint) 45%, var(--paper-raised));`
-- `.custom-cart-price-input`:
-  - `color: var(--brand-deep);`
-- `.cart-head h3 .ic-svg`:
-  - `color: var(--brand);`
-- `.cart-line .thumb-sm`:
-  - `background: var(--brand-tint);`
-- `.cart-line .lt`:
-  - `color: var(--brand-deep);`
-- `.totals-row.grand`:
-  - `color: var(--brand-deep);`
-- `.btn-pay.is-ready`:
-  - Change glow shadow `box-shadow: 0 14px 34px rgba(47,66,216,0.45), 0 0 0 2.5px var(--brand);` to `rgba(10,108,62,0.45)`.
-- `.cash-preset-btn:hover`:
-  - `background: var(--brand-tint); color: var(--brand-deep); border-color: var(--brand);`
-- `.loy-cal-cell.is-selected .loy-cal-day-bubble`:
-  - Remove hardcoded `#2F42D8` fallback: change `var(--brand, #2F42D8)` to `var(--brand, #0A6C3E)`.
-
-### C. Cashier PIN Pad & Roles (`css/views.css`)
-- `.role-toggle button.active`:
-  - `background: var(--brand); box-shadow: 0 2px 8px rgba(10,108,62,0.3);`
-- `.pin-dots .d.filled`:
-  - `background: var(--brand); border-color: var(--brand); box-shadow: 0 0 10px rgba(10,108,62,0.35);`
-
-### D. Mobile Overrides (`css/mobile-fixes.css`)
-- Search for instances of `#2f42d8`:
-  - Lines ~4103–4109: Update to `var(--brand)` or `#0A6C3E`.
-
----
-
-## 4. DOM IDs & View Selectors to Check
-
-| Element ID | File | Function | Change Required |
-|---|---|---|---|
-| `#topbar-title` | `js/app.js`, `www/index.html` | Top navigation branding title | Update text to new Minimart store name |
-| `#sidebar-brand-title` | `js/app.js` | Sidebar brand name | Update brand header text |
-| `#app-logo` / `.brand-mark img` | `js/app.js`, `js/auth.js` | Logo icon display | Point to new logo file or update `src="logo.png"` |
-| `#receipt-logo` | `js/pos.js` | Printed thermal receipt logo | Replace graphic file `logo.png` |
-| `#setting-business-name` | `js/settings.js` | Settings store name field | Set new store name in default config |
-| `#setting-receipt-footer` | `js/settings.js` | Settings receipt greeting | Update "Salamat sa inyong pagbisita" text |
-
----
-
-## 5. Hardcoded Hex Colors in JavaScript (Replace with CSS Tokens)
-
-Several JavaScript view modules contain inline `#4F46E5` (Indigo) or `#2F42D8` that should be replaced with `var(--brand)` or Dark Green:
-
-1. **`js/gasoline.js`**:
-   - Change `border: 1.5px solid #4F46E5` to `border: 1.5px solid var(--brand);`
-   - Change `background: #4F46E5` on `.btn-save-live-price`, `.btn-apply-srp`, and pump badges to `background: var(--brand);`
-   - Change `color: #4F46E5` on `#preview-amount` to `color: var(--brand-deep);`
-   - Change `.btn-srp-preset` pill colors from `#4F46E5; background: #EEF2FF; border: 1px solid #C7D2FE;` to `color: var(--brand-deep); background: var(--brand-tint); border: 1px solid var(--line-strong);`
-2. **`js/shift.js`**:
-   - Line ~934 View-only badge: Change `background: #EEF2FF; color: #4338CA; border: 1px solid #C7D2FE;` to `background: var(--brand-tint); color: var(--brand-deep); border: 1px solid var(--line);`
-3. **`js/venue.js`**:
-   - Lines ~87, 125, 157, 203: Change `border-top: 2px solid #4F46E5;` and icon color `#4F46E5` to `var(--brand)`.
-4. **`js/reports.js`**:
-   - Chart color arrays for Top Selling Products: Replace blue/purple palette (`#3B82F6`, `#6366F1`, `#4F46E5`, `#2563EB`) with a harmonious dark emerald & forest green palette:
-     - `['#0A6C3E', '#10B981', '#059669', '#34D399', '#047857', '#6EE7B7', '#065F46', '#A7F3D0']`
-
----
-
-## 6. Business Data & Config Defaults (`js/db.js`)
-
-In `js/db.js` under `DEFAULT_SETTINGS`:
-```javascript
-businessName: "Your Minimart Name", // e.g. "Emerald Minimart"
-businessAddress: "Your Address",
-businessPhone: "09XX-XXX-XXXX",
-businessTin: "000-000-000-000",
-receiptFooter: "Salamat sa inyong pagbisita! Come again.",
-```
-
-Also check the automated migration block in `js/db.js` (~line 315-325) where `updatedSettings.businessName` is set on first boot.
-
----
-
-## 7. App Manifest, Service Worker & HTML Headers
-
-1. **`index.html`**:
-   - `<title>`: Change `Route 98 — Route98 POS System` to your new store name.
-   - `<meta name="description">`: Update store description.
-   - `<meta name="theme-color" content="#2F42D8">`: Update to `#0A6C3E`.
-2. **`www/manifest.json`**:
-   - `"name"`: Set to new Minimart full name.
-   - `"short_name"`: Set to short name (e.g. for Android home screen icon).
-   - `"theme_color"`: Update to `#0A6C3E`.
-   - `"background_color"`: Update to `#0C1410` (or `#F4F8F5`).
-3. **`www/sw.js`**:
-   - Update cache version string `const CACHE_NAME = 'minimart-v1';` to force clients to invalidate old blue assets.
-
----
-
-## 8. Graphic Assets Checklist
-
-Replace the following files in the project root and `www/` directory with your new Dark Green logo and branding:
-
-| Asset Path | Resolution / Format | Where Used |
+| Token Name | BurgerJay Value | Role / Usage |
 |---|---|---|
-| `route98_logo.png` | 512x512 PNG (transparent or circular) | App topbar, Lock/Login screen PIN pad |
-| `logo.png` | High-res monochrome or green PNG | Thermal printed receipts |
-| `icon.png` | 512x512 PNG | PWA install icon / fallback logo |
-| `favicon.ico` | 32x32 / 48x48 ICO | Browser tab icon |
-| `icon-192.png` | 192x192 PNG | Mobile home screen icon |
-| `icon-512.png` | 512x512 PNG | Android splash / PWA full icon |
-| `apple-touch-icon.png` | 180x180 PNG | iOS Safari home screen icon |
+| `--paper` | `#160D0E` | Dark espresso-crimson main background |
+| `--paper-raised` | `#211315` | Elevated dark card and modal surface |
+| `--paper-dim` | `#10090A` | Sunken dark surface |
+| `--brand-tint` | `#3A1518` | Subtle crimson tint behind active dark-mode elements |
+| `--line` | `#382224` | Dark mode hairlines |
+| `--line-strong` | `#523134` | Dark mode strong borders |
 
 ---
 
-## 9. Rebrand Execution Steps
+## 2. Graphic Assets, PWA, Build Scripts & Android Rebranding
 
-1. **Update `css/tokens.css`**: Paste in the Dark Green token values for `:root` and `[data-theme="dark"]`.
-2. **Update `css/base.css` and `css/views.css`**: Replace the hardcoded `#182B68`, `#2F42D8`, and blue RGBA box-shadows.
-3. **Replace Images**: Place the new green PNG logos in the project root (`route98_logo.png`, `logo.png`, `icon.png`).
-4. **Update `js/db.js` & `index.html`**: Update the store title, TIN, receipt greetings, and default business settings.
-5. **Compile Assets**:
-   Run the build script:
-   ```powershell
-   node scripts/build.js
-   ```
-6. **Verify in Browser**: Test Light Mode, Dark Mode, Receipt Preview, POS Cart, Shift Management, and PIN login screen.
+1. **Logos & Icon Generation (`scripts/build.js`, `scripts/copy_icons.js`, `scripts/process_icons.ps1`)**:
+   - Saved the BurgerJay mascot logo to `burgerjay_logo.png` and deleted `route98_logo.png`.
+   - Updated `scripts/copy_icons.js` and `scripts/process_icons.ps1` to generate `icon.png`, `logo.png`, Android launcher mipmaps, and splash screens directly from `burgerjay_logo.png`.
+   - Updated `scripts/build.js` to copy `assets/` and `burgerjay_logo.png` into `www/`.
+2. **HTML, Manifest, Package & Service Worker**:
+   - `index.html`: Title set to `BurgerJay — POS & Inventory System` and `meta[name="theme-color"]` set to `#C5161D`.
+   - `manifest.json`: `name: "BurgerJay POS"`, `short_name: "BurgerJay"`, `theme_color: "#C5161D"`, `background_color: "#7D0E13"`.
+   - `sw.js`: Cache name updated to `burgerjay-pos-v2` and shell cache updated with `./burgerjay_logo.png` and all 13 `./assets/*.png` menu images.
+   - `package.json`: `"name": "burgerjay-pos"`, `"description": "BurgerJay POS and Kitchen Display System"`.
+3. **Android & Capacitor (`capacitor.config.json`, `android/`, `a.bat`)**:
+   - `capacitor.config.json`: `"appId": "com.burgerjay.pos"`, `"appName": "BurgerJay"`.
+   - `android/app/build.gradle`: `namespace "com.burgerjay.pos"`, `applicationId "com.burgerjay.pos"`, `outputFileName = "burgerjay.apk"`.
+   - `android/app/src/main/res/values/strings.xml`: `app_name` and `title_activity_main` set to `BurgerJay`, package set to `com.burgerjay.pos`.
+   - `android/app/src/main/java/com/burgerjay/pos/MainActivity.java`: Moved package from `com.route98.pos` to `com.burgerjay.pos`.
+   - `a.bat`: Updated Explorer target to `burgerjay.apk`.
+4. **Exports, Receipts & Importers (`js/pos.js`, `js/shift.js`, `js/settings.js`, `js/expenses.js`, `js/dashboard.js`, `js/reports.js`)**:
+   - Replaced all `Route 98` / `route98_` fallback store names, receipt headers, JSON backup filenames (`burgerjay_${id}.json`), CSV export filenames (`BurgerJay_...csv`), and report range keys (`bj_reports_range_state`).
+
+---
+
+## 3. Fast-Food Burger Station POS & KDS Features (`js/kitchen.js`, `css/kitchen.css`, `js/pos.js`, `css/views.css`)
+
+1. **Register POS Refinements (`js/pos.js`, `css/views.css`)**:
+   - **Taller Current Sale Widget Card**: Moved `.category-chips` (`#cat-chips`) inside `.pos-catalog` so the `Current Sale` widget card (`.pos-cart`) extends up to align directly beneath the `Scan Mode` / `Held` bar, maximizing cart height.
+   - **Clean Product Cards Without Stock Badges**: Removed the green stock count badge (`100`) from POS product cards so menu tiles focus cleanly on food photos, names, and prices.
+2. **Kitchen Display System (KDS) Layout & Workflow**:
+   - **All Slips First**: Moved `All Slips` to the first tab position and made it the default view, sorting active orders (`queued`, `cooking`, `ready`) ahead of `completed` orders.
+   - **Stress-Free Compact Tablet Tickets**: Scaled KDS cards so 3–4 slips fit side-by-side on a tablet screen. Removed redundant text (`MAIN BRANCH`, `Slip #...`, `Staff: ...`, `On the Grill / Fryer`, `ORDER ITEMS (TAP TO CHECK OFF)`, and the bottom `Slip` print button) leaving only the bold order code, Dine-In/Take-Out badge, elapsed timer, item rows, and status action button.
+   - **2-Digit Table & Take-Out Codes**: Enforced 2-digit formatting (`T-01` to `T-99` for Dine-In, `TO-01` to `TO-99` for Take-Out — never 3-digit `TO-003`).
+   - **One-Tap Batch Check-Off (`TO COOK NOW` Bar)**: Tapping any batch card in the top `TO COOK NOW` bar automatically checks off all matching unplated items across all active orders at once, with a quick `Undo` toast button.
+3. **Four Core Burger Station Features**:
+   - **Quick Flavor & Add-On Picker at POS (`js/pos.js`)**: Tapping Fries or Burger Combos opens a 1-tap modifier popup for Fries Flavor (`Cheese Powder`, `BBQ Flavor`, `Sour Cream`, `Plain Salted`) and Burger Add-Ons (`Extra Cheese`, `Extra Patty`, `No Onions`, `Extra Crispy`, `No Mayo`, `Spicy`), sending the exact note to the KDS slip and allowing 1-tap editing inside the cart.
+   - **Active / Occupied Table Indicator at Checkout (`js/pos.js`)**: Dine-In checkout checks active KDS orders, marks occupied tables (`04•`) with an amber busy indicator, defaults to the first free table, and warns the cashier if an occupied table is selected.
+   - **Raw Ingredient / Recipe (BOM) Stock Deduction (`js/pos.js`)**: When a sale is finalized, products with a `recipe` array automatically deduct their raw ingredients (buns, patties, cheese slices, fries portions, cups, plus flavor powders and extra add-ons) from inventory and log each deduction in the stock log.
+   - **Customer Order Status Screen (`js/kitchen.js`, `css/kitchen.css`)**: Added a `Customer Screen` tab with a `Full Screen TV` mode showing a split-screen `Preparing` vs. `Now Serving / Ready to Pick Up` number monitor for waiting customers.
+
+---
+
+## 4. BurgerJay Menu & Asset Import (`js/catalog_seed.js`, `js/db.js`, `js/utils.js`, `assets/`)
+
+Imported all **17 BurgerJay menu items** across **5 categories** (`BURGERS`, `COMBOS`, `FRIES`, `HOTDOGS`, `ADD-ONS`) linked to the images in `assets/`:
+
+| ID | Name | Category | Cost | Price | Stock | Unit | Image |
+|---|---|---|---|---|---|---|---|
+| `BJ-BRG-001` | ChixBurg Classic | BURGERS | ₱39.50 | ₱79.00 | 100 | pc | *(SVG Burger Illustration)* |
+| `BJ-BRG-002` | ChixBurg Cheezo | BURGERS | ₱44.50 | ₱89.00 | 100 | pc | *(SVG Burger Illustration)* |
+| `BJ-BRG-003` | ChixBurg Fresno | BURGERS | ₱49.50 | ₱99.00 | 100 | pc | *(SVG Burger Illustration)* |
+| `BJ-BRG-004` | Hawaiian Blast! | BURGERS | ₱65.00 | ₱130.00 | 100 | pc | `assets/Hawaiian Blast.png` |
+| `BJ-BRG-005` | Egg Champ | BURGERS | ₱65.00 | ₱130.00 | 100 | pc | `assets/Egg Champ.png` |
+| `BJ-BRG-006` | Baconarian | BURGERS | ₱75.00 | ₱150.00 | 100 | pc | `assets/Baconarian.png` |
+| `BJ-BRG-007` | Twin Pounder | BURGERS | ₱85.00 | ₱170.00 | 100 | pc | `assets/Twin Pounder.png` |
+| `BJ-BRG-008` | Magnum Slam! | BURGERS | ₱100.00 | ₱200.00 | 100 | pc | `assets/Magnum Slam.png` |
+| `BJ-BRG-009` | Triple Decker | BURGERS | ₱115.00 | ₱230.00 | 100 | pc | `assets/Triple Decker.png` |
+| `BJ-HDG-001` | Cheezdog | HOTDOGS | ₱40.00 | ₱80.00 | 100 | pc | `assets/Cheezdog.png` |
+| `BJ-FRS-001` | Fries | FRIES | ₱25.00 | ₱50.00 | 100 | order | `assets/Fries.png` |
+| `BJ-FRS-002` | Bacon with Fries | FRIES | ₱75.00 | ₱150.00 | 100 | order | `assets/Bacon with Fries.png` |
+| `BJ-ADD-001` | Add Combo Meal (Fries & Drink) | ADD-ONS | ₱35.00 | ₱70.00 | 100 | set | *(SVG Fries Illustration)* |
+| `BJ-CMB-001` | Combo 1 (Cheezdog + Fries & Drink) | COMBOS | ₱50.00 | ₱100.00 | 100 | combo | `assets/Combo1.png` |
+| `BJ-CMB-002` | Combo 2 (Meat Burger + Fries & Drink) | COMBOS | ₱65.00 | ₱130.00 | 100 | combo | `assets/Combo2.png` |
+| `BJ-CMB-003` | Combo 3 (Egg Champ + Fries & Drink) | COMBOS | ₱85.00 | ₱170.00 | 100 | combo | `assets/Combo3.png` |
+| `BJ-CMB-004` | Combo 4 (Twin Pounder + Fries & Drink) | COMBOS | ₱110.00 | ₱220.00 | 100 | combo | `assets/Combo4.png` |
+
+---
+
+## 5. Database Isolation, Staff Cleanup & Safety Verification (`js/db.js`, `js/sync.js`, `js/realtime-sync.js`)
+
+Verified 100% isolation between **BurgerJay** and **Route 98** across Git, Firebase, IndexedDB, and LocalStorage:
+
+| Layer | Route 98 (Untouched) | BurgerJay (Isolated) |
+|---|---|---|
+| **Git Remote (`origin`)** | `JohnPaulInso/Route98Pos.git` | `https://github.com/JohnPaulInso/BurgerJay.git` |
+| **Firebase Project ID** | `route98-bogo` | `burgerjay-bogo` |
+| **Realtime Database URL** | `route98-bogo-default-rtdb...` | `https://burgerjay-bogo-default-rtdb.asia-southeast1.firebasedatabase.app` |
+| **Firestore Snapshot Collection** | `minimart_snapshots` | `burgerjay_snapshots` |
+| **Firestore Sales Chunks** | `minimart_sales_chunks` | `burgerjay_sales_chunks` |
+| **LocalStorage Prefix (`NS`)** | `minimart_` | `bj_` |
+| **IndexedDB Name (`IDB_NAME`)** | `route98_pos_idb` | `burgerjay_pos_idb` |
+| **BroadcastChannel** | `route98_pos_live_channel` | `burgerjay_pos_live_channel` |
+| **Live Server Port** | `5515` | `5516` |
+| **Default Staff & Cashiers** | Route98 Staff (`Rosella`, `Niño`, `Sharon`, `Ike`) | Only `Owner/Admin` (Route98 cashiers/staff stripped in getters/setters & sync) |

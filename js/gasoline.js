@@ -1508,7 +1508,8 @@ const Gas = (() => {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Route98_Fuel_Sales_${periodFilter}_${new Date().toISOString().split("T")[0]}.csv`;
+    // (2026-07-13) Use BurgerJay prefix for fuel sales CSV export; was Route98
+    link.download = `BurgerJay_Fuel_Sales_${periodFilter}_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     Utils.toast("Fuel sales exported to CSV.", "success");
   }

@@ -1,6 +1,6 @@
 // ============================================================
 // inventory-importer.js — CSV Inventory Import Tool
-// Import Loyverse inventory into Route 98 POS system
+// Import Loyverse inventory into BurgerJay POS system
 // ============================================================
 
 const InventoryImporter = (() => {
@@ -96,14 +96,14 @@ const InventoryImporter = (() => {
               continue;
             }
             
-            // Parse values (Column M = Cost, Column S = Price)
+            // (2026-07-13) Support BurgerJay CSV columns; was Route 98 only
             const cost = parseFloat(item['Cost']) || 0;
-            const price = parseFloat(item['Price [Route 98 - Minimart]']) || 0;
-            const stock = parseFloat(item['In stock [Route 98 - Minimart]']) || 0;
-            const lowStockThreshold = parseFloat(item['Low stock [Route 98 - Minimart]']) || 5;
+            const price = parseFloat(item['Price [BurgerJay]'] ?? item['Price']) || 0;
+            const stock = parseFloat(item['In stock [BurgerJay]'] ?? item['In stock']) || 0;
+            const lowStockThreshold = parseFloat(item['Low stock [BurgerJay]'] ?? item['Low stock']) || 5;
             const category = item['Category']?.trim() || 'Misc';
             const trackStock = item['Track stock']?.toUpperCase() === 'Y';
-            const availableForSale = item['Available for sale [Route 98 - Minimart]']?.toUpperCase() === 'Y';
+            const availableForSale = (item['Available for sale [BurgerJay]'] ?? item['Available for sale'] ?? 'Y')?.toUpperCase() === 'Y';
             
             // Skip if not available for sale
             if (!availableForSale) {
@@ -295,7 +295,7 @@ const InventoryImporter = (() => {
       if (inventoryData) {
         const items = parseCSV(inventoryData);
         const availableItems = items.filter(item => 
-          item['Available for sale [Route 98 - Minimart]']?.toUpperCase() === 'Y' && 
+          (item['Available for sale [BurgerJay]'] ?? item['Available for sale'] ?? 'Y')?.toUpperCase() === 'Y' && 
           item['Name']?.trim()
         );
         

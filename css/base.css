@@ -87,8 +87,9 @@ h1 > .ic-svg, h2 > .ic-svg, h3 > .ic-svg, h4 > .ic-svg{ margin-right:8px; vertic
   flex-shrink:0; overflow:hidden;
 }
 .brand-mark img{ width:100%; height:100%; object-fit:contain; border-radius:12px; display:block; }
-.brand-text strong{ display:block; font-size:1.12rem; font-family:var(--font-display); font-weight:850; letter-spacing:-.01em; color:#182B68; }
-[data-theme="dark"] .brand-text strong{ color:#AFC0FF; }
+/* (2026-07-13) Set BurgerJay brand header text red & dark mode pink; was blue */
+.brand-text strong{ display:block; font-size:1.12rem; font-family:var(--font-display); font-weight:850; letter-spacing:-.01em; color:#8B151B; }
+[data-theme="dark"] .brand-text strong{ color:#FCA5A5; }
 .brand-text span{ display:block; font-size:.70rem; color:var(--ink-soft); font-weight:700; letter-spacing:.02em; }
 
 .nav-group{ margin-bottom:10px; }
@@ -102,8 +103,10 @@ h1 > .ic-svg, h2 > .ic-svg, h3 > .ic-svg, h4 > .ic-svg{ margin-right:8px; vertic
 }
 .nav-btn:active{ background:var(--paper-dim); color:var(--ink); }
 .nav-btn .ic{ width:20px; display:flex; align-items:center; justify-content:center; }
+/* (2026-07-13) Set active nav text and icon gold accent; was #AFC0FF */
 .nav-btn.active{ background:linear-gradient(90deg, var(--brand-tint), transparent); color:var(--brand-deep); border-left-color:var(--brand); font-weight:700; }
-[data-theme="dark"] .nav-btn.active{ color:#AFC0FF; }
+.nav-btn.active .ic{ color:var(--brand-gold); }
+[data-theme="dark"] .nav-btn.active{ color:#FCA5A5; }
 .nav-btn .badge-dot{ margin-left:auto; background:var(--danger); color:#fff; font-size:.62rem; font-weight:700; border-radius:20px; padding:1px 6px; }
 
 .sidebar-foot{ margin-top:auto; padding:10px; }
@@ -432,7 +435,8 @@ table.data tr.low-stock td{ background:var(--warning-tint); }
   .user-chip:hover, .branch-pill-btn:hover{ border-color:var(--brand-bright); box-shadow:var(--shadow-sm); }
   .btn:hover{ box-shadow:var(--shadow-sm); }
   .btn:not(.btn-primary):not(.btn-danger):not(.btn-amber):hover{ background:var(--brand-tint); color:var(--brand-deep); border-color:var(--brand-bright); }
-  .btn-primary:hover{ background:linear-gradient(135deg, var(--brand), var(--brand-deep)); box-shadow:0 10px 24px rgba(47,66,216,.35); }
+  /* (2026-07-13) Update hover button shadow to crimson red; was blue rgba(47,66,216) */
+  .btn-primary:hover{ background:linear-gradient(135deg, var(--brand), var(--brand-deep)); box-shadow:0 10px 24px rgba(197,22,29,.35); }
   .btn-ghost:hover{ background:var(--brand-tint); color:var(--brand-deep); }
   .ui-select-btn:hover{ border-color:var(--brand); }
   .ui-select-opt:hover{ background:var(--brand-tint); color:var(--brand-deep); }

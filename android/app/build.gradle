@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.route98.pos"
+    namespace "com.burgerjay.pos"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.route98.pos"
+        applicationId "com.burgerjay.pos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -22,10 +22,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-    // (2026-07-13) Set output APK filename to route98.apk; was app-debug.apk
+    // (2026-07-13) Set output APK filename to burgerjay.apk; was route98.apk
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "route98.apk"
+            outputFileName = "burgerjay.apk"
         }
     }
 }

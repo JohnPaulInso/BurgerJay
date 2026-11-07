@@ -1,0 +1,18 @@
+id,name,brand,distributor,barcode,category,cost,price,stock,unit,lowStockThreshold,imageUrl
+BJ-BRG-001,ChixBurg Classic,BurgerJay,BurgerJay Main,,Burgers,39.5,79.0,100,pc,15,
+BJ-BRG-002,ChixBurg Cheezo,BurgerJay,BurgerJay Main,,Burgers,44.5,89.0,100,pc,15,
+BJ-BRG-003,ChixBurg Fresno,BurgerJay,BurgerJay Main,,Burgers,49.5,99.0,100,pc,15,
+BJ-BRG-004,Hawaiian Blast!,BurgerJay,BurgerJay Main,,Burgers,65.0,130.0,100,pc,15,Hawaiian Blast.png
+BJ-BRG-005,Egg Champ,BurgerJay,BurgerJay Main,,Burgers,65.0,130.0,100,pc,15,Egg Champ.png
+BJ-BRG-006,Baconarian,BurgerJay,BurgerJay Main,,Burgers,75.0,150.0,100,pc,15,Baconarian.png
+BJ-BRG-007,Twin Pounder,BurgerJay,BurgerJay Main,,Burgers,85.0,170.0,100,pc,15,Twin Pounder.png
+BJ-BRG-008,Magnum Slam!,BurgerJay,BurgerJay Main,,Burgers,100.0,200.0,100,pc,15,Magnum Slam.png
+BJ-BRG-009,Triple Decker,BurgerJay,BurgerJay Main,,Burgers,115.0,230.0,100,pc,15,Triple Decker.png
+BJ-HDG-001,Cheezdog,BurgerJay,BurgerJay Main,,Hotdogs,40.0,80.0,100,pc,15,Cheezdog.png
+BJ-FRS-001,Fries,BurgerJay,BurgerJay Main,,Fries,25.0,50.0,100,order,15,Fries.png
+BJ-FRS-002,Bacon with Fries,BurgerJay,BurgerJay Main,,Fries,75.0,150.0,100,order,15,Bacon with Fries.png
+BJ-ADD-001,Add Combo Meal (Fries & Drink),BurgerJay,BurgerJay Main,,Add-ons,35.0,70.0,100,set,15,
+BJ-CMB-001,Combo 1 (Cheezdog + Fries & Drink),BurgerJay,BurgerJay Main,,Combos,50.0,100.0,100,combo,15,Combo1.png
+BJ-CMB-002,Combo 2 (Meat Burger + Fries & Drink),BurgerJay,BurgerJay Main,,Combos,65.0,130.0,100,combo,15,Combo2.png
+BJ-CMB-003,Combo 3 (Egg Champ + Fries & Drink),BurgerJay,BurgerJay Main,,Combos,85.0,170.0,100,combo,15,Combo3.png
+BJ-CMB-004,Combo 4 (Twin Pounder + Fries & Drink),BurgerJay,BurgerJay Main,,Combos,110.0,220.0,100,combo,15,Combo4.png

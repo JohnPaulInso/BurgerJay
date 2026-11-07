@@ -1,11 +1,11 @@
 // ============================================================
-// dashboard.js — Route 98 Consolidated Executive Dashboard
-// Multi-business reporting & unit drilldown for Minimart, Gas, Venue & Restaurant
+// dashboard.js — BurgerJay Consolidated Executive Dashboard
+// Multi-business reporting & unit drilldown for BurgerJay POS & KDS
 // ============================================================
 // (2026-07-13) Synchronize dashboard filters, empty states & 4-unit views; was broken
 const Dashboard = (() => {
-  // (2026-07-13) Synchronize date stepper state with reports; was static chips
-  const DASH_RANGE_KEY = "r98_reports_range_state";
+  // (2026-07-13) Use bj_reports_range_state key; was r98_reports_range_state
+  const DASH_RANGE_KEY = "bj_reports_range_state";
   let periodKey = "today";
   let activeRange = null;
   let timeFilter = "all";
@@ -99,12 +99,13 @@ const Dashboard = (() => {
     render();
   }
 
+  // (2026-07-13) Set BurgerJay crimson red themes for dashboard; was indigo/blue
   const BIZ_THEMES = {
-    all: { name: "Consolidated Executive", color: "#312E81", bg: "#EEF2FF", border: "#C7D2FE", icon: "bar-chart" },
-    minimart: { name: "Minimart Store", color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE", icon: "store" },
-    gasoline: { name: "Gasoline Station", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A", icon: "fuel" },
+    all: { name: "BurgerJay Analytics", color: "#8B151B", bg: "#FDF2F2", border: "#FECACA", icon: "bar-chart" },
+    minimart: { name: "BurgerJay Store", color: "#C5161D", bg: "#FDF2F2", border: "#FECACA", icon: "store" },
+    gasoline: { name: "Gasoline Station", color: "#D4971A", bg: "#FFFBEB", border: "#FDE68A", icon: "fuel" },
     venue: { name: "Event Venue", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE", icon: "party" },
-    restaurant: { name: "Restaurant", color: "#059669", bg: "#ECFDF5", border: "#A7F3D0", icon: "utensils" }
+    restaurant: { name: "Restaurant", color: "#C5161D", bg: "#FDF2F2", border: "#FECACA", icon: "utensils" }
   };
 
   function destroyCharts(){

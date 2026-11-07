@@ -176,7 +176,17 @@ const Sync = (() => {
     merged.expenses = mergeArray3Way(base.expenses, local.expenses, remote.expenses, "id", "ts");
     // (2026-07-13) Keep void logs sorted descending in merge; was unsorted
     merged.voidLogs = mergeArray3Way(base.voidLogs, local.voidLogs, remote.voidLogs, "id", "ts").sort((a,b)=>(b.ts||0)-(a.ts||0));
-    merged.users = mergeArray3Way(base.users, local.users, remote.users, "id", "updatedAt");
+    // (2026-07-13) Filter out legacy Route98 staff during 3-way user merge; was keeping all
+    const r98Ids = new Set(["u_jp", "u_sharon", "u_ike", "u_rosella", "u_nino"]);
+    const r98Names = new Set(["cashier", "jp", "sharon", "elaicka / ike", "rosella", "niño", "nino"]);
+    merged.users = mergeArray3Way(base.users, local.users, remote.users, "id", "updatedAt").filter(u => {
+      const uid = String(u?.id || "").trim();
+      const nm = String(u?.name || "").trim().toLowerCase();
+      return !r98Ids.has(uid) && !r98Names.has(nm);
+    });
+    if(Array.isArray(merged.cashiers)){
+      merged.cashiers = merged.cashiers.filter(c => !r98Names.has(String(c || "").trim().toLowerCase()));
+    }
     merged.fuelDeliveries = mergeArray3Way(base.fuelDeliveries, local.fuelDeliveries, remote.fuelDeliveries, "id", "ts");
     merged.venueLeads = mergeArray3Way(base.venueLeads, local.venueLeads, remote.venueLeads, "id", "ts");
     merged.bookings = mergeArray3Way(base.bookings, local.bookings, remote.bookings, "id", "ts");
@@ -272,7 +282,8 @@ const Sync = (() => {
       try {
         const promises = [];
         for(let i = 0; i < chunkCount; i++){
-          promises.push(mod.getDoc(mod.doc(database, "minimart_sales_chunks", `chunk_${i}`)).catch(()=>null));
+          // (2026-07-13) Use burgerjay_sales_chunks collection; was minimart_sales_chunks
+          promises.push(mod.getDoc(mod.doc(database, "burgerjay_sales_chunks", `chunk_${i}`)).catch(()=>null));
         }
         const docs = await Promise.all(promises);
         const extra = [];
@@ -307,14 +318,14 @@ const Sync = (() => {
       DB.setSyncMeta({ ...meta, status:"syncing" }); paintStatus();
       const { db: database, mod } = await ensureFirebase();
 
-      // (2026-07-13) Auto-reconnect Firestore on offline error; was unhandled fail
+      // (2026-07-13) Use burgerjay_snapshots collection; was minimart_snapshots
       let snapDoc = null;
       try {
-        snapDoc = await mod.getDoc(mod.doc(database, "minimart_snapshots", "store"));
+        snapDoc = await mod.getDoc(mod.doc(database, "burgerjay_snapshots", "store"));
       } catch(e) {
         if(String(e?.message||"").includes("offline") && mod.enableNetwork){
           await mod.enableNetwork(database).catch(()=>{});
-          snapDoc = await mod.getDoc(mod.doc(database, "minimart_snapshots", "store")).catch(()=>null);
+          snapDoc = await mod.getDoc(mod.doc(database, "burgerjay_snapshots", "store")).catch(()=>null);
         }
       }
       let finalSnap = DB.snapshot();
@@ -367,7 +378,7 @@ const Sync = (() => {
       for(let ci = 0; ci < salesChunkCount; ci++){
         const slice = remainingSales.slice(ci * CHUNK_SIZE, (ci + 1) * CHUNK_SIZE);
         try {
-          await mod.setDoc(mod.doc(database, "minimart_sales_chunks", `chunk_${ci}`), {
+          await mod.setDoc(mod.doc(database, "burgerjay_sales_chunks", `chunk_${ci}`), {
             chunkIndex: ci,
             sales: slice,
             updatedAt: exportTime
@@ -394,11 +405,11 @@ const Sync = (() => {
 
       try {
         lastPushedExportedAt = exportTime;
-        await mod.setDoc(mod.doc(database, "minimart_snapshots", "store"), cloudSnap, { merge:false });
+        await mod.setDoc(mod.doc(database, "burgerjay_snapshots", "store"), cloudSnap, { merge:false });
       } catch(setErr) {
         if(String(setErr?.message||"").includes("offline") && mod.enableNetwork){
           await mod.enableNetwork(database).catch(()=>{});
-          await mod.setDoc(mod.doc(database, "minimart_snapshots", "store"), cloudSnap, { merge:false });
+          await mod.setDoc(mod.doc(database, "burgerjay_snapshots", "store"), cloudSnap, { merge:false });
         } else {
           throw setErr;
         }
@@ -430,19 +441,19 @@ const Sync = (() => {
       DB.setSyncMeta({ ...DB.getSyncMeta(), status:"syncing" }); paintStatus();
       const { db: database, mod } = await ensureFirebase();
 
-      // (2026-07-13) Pull latest from server first; was cached getDoc only
+      // (2026-07-13) Pull latest from burgerjay_snapshots; was minimart_snapshots
       let snapDoc = null;
       try {
         if(mod.getDocFromServer){
-          snapDoc = await mod.getDocFromServer(mod.doc(database, "minimart_snapshots", "store"));
+          snapDoc = await mod.getDocFromServer(mod.doc(database, "burgerjay_snapshots", "store"));
         } else {
-          snapDoc = await mod.getDoc(mod.doc(database, "minimart_snapshots", "store"));
+          snapDoc = await mod.getDoc(mod.doc(database, "burgerjay_snapshots", "store"));
         }
       } catch(e) {
         if(String(e?.message||"").includes("offline") && mod.enableNetwork){
           await mod.enableNetwork(database).catch(()=>{});
         }
-        snapDoc = await mod.getDoc(mod.doc(database, "minimart_snapshots", "store")).catch(()=>null);
+        snapDoc = await mod.getDoc(mod.doc(database, "burgerjay_snapshots", "store")).catch(()=>null);
       }
       if(snapDoc && snapDoc.exists()){
         let remoteData = snapDoc.data();
@@ -453,138 +464,8 @@ const Sync = (() => {
         DB.restoreSnapshot(merged);
         DB.setSyncBaseline(merged);
         DB.setSyncMeta({ lastSynced: Date.now(), status:"idle" });
-      } else if(!snapDoc) {
-        DB.setSyncMeta({ ...DB.getSyncMeta(), status:"idle" });
       } else {
         DB.setSyncMeta({ ...DB.getSyncMeta(), status:"idle" });
-        // Fallback: Read individual collections (only on first-time setup)
-        const productsSnap = await mod.getDocs(mod.collection(database, "products"));
-        if(!productsSnap.empty){
-          const prods = [];
-          productsSnap.forEach(d => prods.push(d.data()));
-          if(prods.length) DB.setProducts(prods);
-        }
-        const salesSnap = await mod.getDocs(mod.collection(database, "sales"));
-        if(!salesSnap.empty){
-          const sales = [];
-          salesSnap.forEach(d => sales.push(d.data()));
-          if(sales.length) DB.setSales(sales);
-        }
-        DB.setSyncMeta({ lastSynced: Date.now(), status:"idle" });
-      }
-
-      // (2026-07-13) Omit querying backups collection in pull; was burning read quota
-
-      // (2026-07-13) Pull subcollections only on first-time setup; was redundant on every pull
-      if(!snapDoc.exists()){
-      try {
-        const prodSnap = await mod.getDocs(mod.collection(database, "products"));
-        if(!prodSnap.empty){
-          const cloudProds = [];
-          prodSnap.forEach(d => cloudProds.push(d.data()));
-          if(cloudProds.length){
-            const curProds = DB.getProducts();
-            const curIds = new Set(curProds.map(p => p.id));
-            const curBarcodes = new Set(curProds.map(p => (p.barcode || "").trim()).filter(b => b && b !== "—" && b !== "-" && b !== "0"));
-            const curNames = new Set(curProds.map(p => (p.name || "").trim().toLowerCase()).filter(Boolean));
-            let addedP = false;
-            // (2026-07-13) Match cloud products by id, valid barcode, and name; was empty-barcode bypass
-            cloudProds.forEach(p => {
-              const cleanCode = (p.barcode || "").trim();
-              const hasCode = cleanCode && cleanCode !== "—" && cleanCode !== "-" && cleanCode !== "0";
-              const normName = (p.name || "").trim().toLowerCase();
-              const exists = curIds.has(p.id) || (hasCode && curBarcodes.has(cleanCode)) || (normName && curNames.has(normName));
-              if(!exists){
-                curProds.push(p);
-                curIds.add(p.id);
-                if(hasCode) curBarcodes.add(cleanCode);
-                if(normName) curNames.add(normName);
-                addedP = true;
-              }
-            });
-            if(addedP) DB.setProducts(curProds);
-          }
-        }
-      } catch(e) { console.warn("Could not pull products collection:", e); }
-
-      try {
-        const salesSnap = await mod.getDocs(mod.collection(database, "sales"));
-        if(!salesSnap.empty){
-          const cloudSales = [];
-          salesSnap.forEach(d => cloudSales.push(d.data()));
-          if(cloudSales.length){
-            const curSales = DB.getSales();
-            const curSaleIds = new Set(curSales.map(s => String(s.id).toLowerCase()));
-            // (2026-07-13) Omit deleted sales from cloud pull & delete doc; was re-added
-            const deletedIds = DB.getDeletedSaleIds ? DB.getDeletedSaleIds() : new Set();
-            let addedS = false;
-            cloudSales.forEach(s => {
-              const sId = String(s.id || "").toLowerCase();
-              const rId = String(s.receiptNo || "").toLowerCase();
-              const cleanId = sId.replace(/^txn-/, "");
-              if(deletedIds.has(s.id) || deletedIds.has(sId) || deletedIds.has(rId) || deletedIds.has(cleanId)){
-                try { mod.deleteDoc(mod.doc(database, "sales", String(s.id || s.receiptNo))).catch(()=>{}); } catch(e){}
-                return;
-              }
-              if(!curSaleIds.has(sId)){
-                curSales.push(s);
-                curSaleIds.add(sId);
-                addedS = true;
-              }
-            });
-            if(addedS){
-              curSales.sort((a,b) => (b.ts || 0) - (a.ts || 0));
-              DB.setSales(curSales);
-            }
-          }
-        }
-      } catch(e) { console.warn("Could not pull sales collection:", e); }
-
-      // Also pull individual cloud backups collection and merge without limits
-      try {
-        const backupsSnap = await mod.getDocs(mod.collection(database, "backups"));
-        if(!backupsSnap.empty){
-          const cloudBackups = [];
-          backupsSnap.forEach(d => cloudBackups.push(d.data()));
-          if(cloudBackups.length){
-            const existing = DB.getBackups();
-            const existingIds = new Set(existing.map(x => x.id));
-            const merged = [...existing];
-            cloudBackups.forEach(b => {
-              if(!existingIds.has(b.id)){
-                merged.push(b);
-              }
-            });
-            merged.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
-            DB.setBackups(merged);
-          }
-        }
-      } catch(e) {
-        console.warn("Could not pull backups collection:", e);
-      }
-
-      // Also pull individual cloud voidLogs collection and merge without limits
-      try {
-        const voidSnap = await mod.getDocs(mod.collection(database, "voidLogs"));
-        if(!voidSnap.empty){
-          const cloudVoids = [];
-          voidSnap.forEach(d => cloudVoids.push(d.data()));
-          if(cloudVoids.length){
-            const existing = DB.getVoidLogs();
-            const existingIds = new Set(existing.map(x => x.id));
-            const merged = [...existing];
-            cloudVoids.forEach(v => {
-              if(!existingIds.has(v.id)){
-                merged.push(v);
-              }
-            });
-            merged.sort((a,b) => (b.ts || 0) - (a.ts || 0));
-            DB.setVoidLogs(merged);
-          }
-        }
-      } catch(e) {
-        console.warn("Could not pull voidLogs collection:", e);
-      }
       }
     }catch(err){
       console.error("Firestore pull failed", err);
@@ -846,8 +727,8 @@ const Sync = (() => {
       const { db: database, mod } = await ensureFirebase();
       if(unsubSnapshot) unsubSnapshot();
 
-      // (2026-07-13) Skip stale cached onSnapshot; was processing cached docs
-      unsubSnapshot = mod.onSnapshot(mod.doc(database, "minimart_snapshots", "store"), { includeMetadataChanges: true }, async (docSnap) => {
+      // (2026-07-13) Listen to burgerjay_snapshots in Firestore; was minimart_snapshots
+      unsubSnapshot = mod.onSnapshot(mod.doc(database, "burgerjay_snapshots", "store"), { includeMetadataChanges: true }, async (docSnap) => {
         if(docSnap.metadata?.hasPendingWrites) return;
         if(docSnap.metadata?.fromCache) return;
         if(docSnap.exists()){
@@ -968,11 +849,19 @@ const Sync = (() => {
     checkDailyBackup();
     setInterval(checkDailyBackup, 30 * 60 * 1000);
     
-    // (2026-10-02) Use ONLY realtime listener (efficient) instead of polling
-    startRealtimeListener();
-
-    // (2026-07-13) Auto-pull cloud snapshot on launch; was skipped if local exists
-    pullSnapshot();
+    // (2026-07-13) Push imported BurgerJay menu snapshot to Firestore; was blank state
+    if(!localStorage.getItem("bj_firestore_assets_menu_v1")){
+      localStorage.setItem("bj_firestore_assets_menu_v1", "true");
+      DB.setSyncBaseline(null);
+      pushSnapshot(true).then(() => {
+        startRealtimeListener();
+      }).catch(() => {
+        startRealtimeListener();
+      });
+    } else {
+      startRealtimeListener();
+      pullSnapshot();
+    }
     // (2026-07-13) Auto-drain offline queue on launch; was online event only
     syncOfflineQueue().catch(()=>{});
 

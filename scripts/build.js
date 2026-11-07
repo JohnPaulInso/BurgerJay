@@ -27,7 +27,8 @@ const copyRecursive = (src, dest) => {
   }
 };
 
-const itemsToCopy = ['css', 'js', 'index.html', 'manifest.json', 'sw.js', 'route98_logo.png', 'icon.png', 'icon.svg', 'logo.png'];
+// (2026-07-13) Include assets directory in build itemsToCopy; was missing
+const itemsToCopy = ['assets', 'css', 'js', 'index.html', 'manifest.json', 'sw.js', 'burgerjay_logo.png', 'icon.png', 'icon.svg', 'logo.png'];
 
 itemsToCopy.forEach(item => {
   const itemPath = path.join(srcDir, item);

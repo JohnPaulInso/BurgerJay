@@ -3,10 +3,11 @@ const path = require('path');
 
 const rootDir = path.resolve(__dirname, '..');
 const resDir = path.join(rootDir, 'android', 'app', 'src', 'main', 'res');
-const logoSrc = path.join(rootDir, 'route98_logo.png');
+// (2026-07-13) Use burgerjay_logo.png as icon source; was route98_logo.png
+const logoSrc = path.join(rootDir, 'burgerjay_logo.png');
 
 if (!fs.existsSync(logoSrc)) {
-  console.error('route98_logo.png not found at root');
+  console.error('burgerjay_logo.png not found at root');
   process.exit(1);
 }
 

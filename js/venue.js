@@ -36,7 +36,8 @@ const Venue = (() => {
   }
 
   const VENUE_AREAS = [
-    "Whole Route 98 Venue",
+    // (2026-07-13) Rebrand venue area name to BurgerJay; was Whole Route 98 Venue
+    "Whole BurgerJay Venue",
     "Function Hall / Pavilion",
     "Gazebo & Garden Area",
     "Poolside & Deck",
@@ -367,7 +368,8 @@ const Venue = (() => {
       <div style="display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden;">
         <div class="view-head" style="margin-bottom:8px;">
           <div>
-            <h2>${Icons.get("party",{size:22})} Route 98 Venue Booking</h2>
+            <!-- (2026-07-13) Rebrand venue booking header to BurgerJay; was Route 98 -->
+            <h2>${Icons.get("party",{size:22})} BurgerJay Venue Booking</h2>
           </div>
           <div class="input-row" style="width:auto;">
             <button class="btn btn-outline" id="btn-export-bk">${Icons.get("download",{size:15})} Export Bookings</button>
@@ -850,7 +852,8 @@ const Venue = (() => {
                 </td>
                 <td>
                   <span class="badge badge-brand" style="font-size:.84rem;font-weight:800;">${Utils.escapeHtml(b.eventType)}</span>
-                  <div class="text-xs text-faint" style="margin-top:2px;">${Utils.escapeHtml(b.venueArea || "Whole Route 98 Venue")}</div>
+                  <!-- (2026-07-13) Rebrand default venue area to BurgerJay; was Route 98 -->
+                  <div class="text-xs text-faint" style="margin-top:2px;">${Utils.escapeHtml(b.venueArea || "Whole BurgerJay Venue")}</div>
                 </td>
                 <td class="mono font-bold" style="text-align:center;font-size:1.02rem;">${b.startTime} – ${b.endTime}</td>
                 <td class="mono font-bold" style="text-align:right;font-size:1.15rem;color:var(--brand-deep);">${Utils.money(b.fee)}</td>
@@ -899,7 +902,8 @@ const Venue = (() => {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `Route98_Venue_Reservations_${new Date().toISOString().split("T")[0]}.csv`;
+    // (2026-07-13) Use BurgerJay prefix for venue CSV export; was Route98
+    link.download = `BurgerJay_Venue_Reservations_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     Utils.toast("Reservations exported to CSV.", "success");
   }

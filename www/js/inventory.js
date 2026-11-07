@@ -122,8 +122,30 @@ const Inventory = (() => {
         <input class="input" id="f-name" value="${initial?Utils.escapeHtml(initial.name||""):""}" placeholder="e.g. Instant Noodles">
       </div>
       <div class="field">
-        <label>Category</label>
+        <!-- (2026-07-13) Add inline custom category creator in Add/Edit Product; was fixed select -->
+        <div class="flex-between" style="align-items:center;margin-bottom:4px;">
+          <label style="margin-bottom:0;">Category</label>
+          <button type="button" class="btn btn-xs btn-outline" id="btn-toggle-new-cat" style="font-size:0.74rem;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;">${Icons.get("plus",{size:12})} <span>+ Add Custom Category</span></button>
+        </div>
         <div id="f-category-wrap"></div>
+        <div id="f-new-category-row" style="display:none;margin-top:8px;gap:6px;align-items:center;">
+          <input class="input" id="f-new-category-input" placeholder="Type new category (e.g. DRINKS, DESSERTS)" style="flex:1;">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-save-new-cat" style="white-space:nowrap;">Save Category</button>
+        </div>
+      </div>
+      <!-- (2026-07-13) Add customizable Drink / Variant Choices section for POS popup; was none -->
+      <div class="field" id="f-choices-section" style="padding:10px 12px;background:var(--paper-dim);border-radius:var(--r-md);border:1px solid var(--line);">
+        <div class="flex-between" style="align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
+          <div>
+            <label style="margin-bottom:0;font-weight:800;">Drink / Flavor Choices <span class="text-faint" style="text-transform:none;font-weight:500;">(shown at POS when tapped)</span></label>
+          </div>
+          <button type="button" class="btn btn-xs btn-outline" id="btn-load-drink-presets" style="font-size:0.72rem;padding:2px 8px;">+ Load Drink Presets</button>
+        </div>
+        <div id="f-choices-pills" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input class="input" id="f-new-choice-input" placeholder="Add choice (e.g. Iced Tea, Cucumber, Blue Lemonade, Coke, Sprite)" style="flex:1;height:34px;font-size:0.84rem;">
+          <button type="button" class="btn btn-sm btn-primary" id="btn-add-choice" style="white-space:nowrap;height:34px;">+ Add Choice</button>
+        </div>
       </div>
       <div class="field">
         <label>Barcode / SKU</label>
@@ -212,9 +234,122 @@ const Inventory = (() => {
       ]
     });
 
-    modal.querySelector("#f-category-wrap").innerHTML = UISelect.render("f-category", cats, initial?.category || cats[0]);
-    UISelect.bind("f-category", () => { updatePreview(modal); if(!isEdit) saveDraft(); });
-    modal.querySelector("#f-unit-wrap").innerHTML = UISelect.render("f-unit", ["pc","pack","kg","g","L","ml","box"], initial?.unit || "pc");
+    // (2026-07-13) Bind custom category creator & drink/flavor choices editor; was static category select
+    const ADD_CAT_OPT = "+ ADD CUSTOM CATEGORY...";
+    let currentCats = [...cats];
+    const renderCategorySelect = (selectedCat) => {
+      const optsList = [...currentCats, ADD_CAT_OPT];
+      const selVal = selectedCat && currentCats.includes(selectedCat) ? selectedCat : (currentCats[0] || "BURGERS");
+      modal.querySelector("#f-category-wrap").innerHTML = UISelect.render("f-category", optsList, selVal);
+      UISelect.bind("f-category", (val) => {
+        if(val === ADD_CAT_OPT){
+          const row = modal.querySelector("#f-new-category-row");
+          if(row){
+            row.style.display = "flex";
+            modal.querySelector("#f-new-category-input")?.focus();
+          }
+        } else {
+          updatePreview(modal);
+          if(!isEdit) saveDraft();
+        }
+      });
+    };
+    renderCategorySelect(initial?.category || currentCats[0]);
+
+    const newCatRow = modal.querySelector("#f-new-category-row");
+    const newCatInput = modal.querySelector("#f-new-category-input");
+    const toggleNewCatBtn = modal.querySelector("#btn-toggle-new-cat");
+    const saveNewCatBtn = modal.querySelector("#btn-save-new-cat");
+
+    const addCustomCategoryNow = () => {
+      const raw = (newCatInput?.value || "").trim().toUpperCase();
+      if(!raw || raw === "ALL" || raw === ADD_CAT_OPT){
+        Utils.toast("Enter a valid category name.", "warn");
+        return null;
+      }
+      const allCats = DB.getCategories().map(c => String(c || "").trim().toUpperCase()).filter(Boolean);
+      if(!allCats.includes(raw)){
+        allCats.push(raw);
+        DB.setCategories(allCats);
+      }
+      if(!currentCats.includes(raw)) currentCats.push(raw);
+      renderCategorySelect(raw);
+      if(newCatInput) newCatInput.value = "";
+      if(newCatRow) newCatRow.style.display = "none";
+      updatePreview(modal);
+      if(!isEdit) saveDraft();
+      Utils.toast(`Category "${raw}" added and selected.`, "success", 1600);
+      return raw;
+    };
+
+    if(toggleNewCatBtn && newCatRow){
+      toggleNewCatBtn.onclick = () => {
+        const isHidden = newCatRow.style.display === "none";
+        newCatRow.style.display = isHidden ? "flex" : "none";
+        if(isHidden) newCatInput?.focus();
+      };
+    }
+    if(saveNewCatBtn){
+      saveNewCatBtn.onclick = addCustomCategoryNow;
+    }
+    if(newCatInput){
+      newCatInput.addEventListener("keydown", (e) => {
+        if(e.key === "Enter"){ e.preventDefault(); addCustomCategoryNow(); }
+      });
+    }
+
+    const DEFAULT_DRINK_PRESETS = ["Iced Tea", "Cucumber", "Blue Lemonade", "Coke", "Sprite", "Royal", "Mountain Dew", "Bottled Water"];
+    let productChoices = Array.isArray(initial?.choices) ? [...initial.choices] : [];
+    const choicesPillsEl = modal.querySelector("#f-choices-pills");
+    const newChoiceInput = modal.querySelector("#f-new-choice-input");
+    const renderChoicesPills = () => {
+      if(!choicesPillsEl) return;
+      modal._productChoices = [...productChoices];
+      if(!productChoices.length){
+        choicesPillsEl.innerHTML = `<span class="text-xs text-faint">No custom choices set yet. Click "+ Load Drink Presets" or type below to add choices like Iced Tea, Cucumber, Blue Lemonade, Coke, Sprite.</span>`;
+        return;
+      }
+      choicesPillsEl.innerHTML = productChoices.map((ch, idx) => `
+        <span class="badge badge-brand" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;font-size:0.78rem;border-radius:99px;">
+          <span>${Utils.escapeHtml(ch)}</span>
+          <button type="button" data-rm-choice="${idx}" style="border:none;background:transparent;color:inherit;cursor:pointer;font-weight:900;font-size:0.9rem;line-height:1;padding:0;">×</button>
+        </span>
+      `).join("");
+      choicesPillsEl.querySelectorAll("[data-rm-choice]").forEach(btn => {
+        btn.onclick = () => {
+          const i = Number(btn.dataset.rmChoice);
+          productChoices.splice(i, 1);
+          renderChoicesPills();
+        };
+      });
+    };
+    renderChoicesPills();
+
+    modal.querySelector("#btn-load-drink-presets")?.addEventListener("click", () => {
+      DEFAULT_DRINK_PRESETS.forEach(d => {
+        if(!productChoices.some(x => x.toLowerCase() === d.toLowerCase())) productChoices.push(d);
+      });
+      renderChoicesPills();
+      Utils.toast("Loaded drink presets (Iced Tea, Cucumber, Blue Lemonade, Coke, Sprite, etc.).", "success", 1800);
+    });
+
+    const addChoiceFromInput = () => {
+      const raw = (newChoiceInput?.value || "").trim();
+      if(!raw) return;
+      raw.split(",").map(s => s.trim()).filter(Boolean).forEach(part => {
+        if(!productChoices.some(x => x.toLowerCase() === part.toLowerCase())){
+          productChoices.push(part);
+        }
+      });
+      if(newChoiceInput) newChoiceInput.value = "";
+      renderChoicesPills();
+    };
+    modal.querySelector("#btn-add-choice")?.addEventListener("click", addChoiceFromInput);
+    newChoiceInput?.addEventListener("keydown", (e) => {
+      if(e.key === "Enter"){ e.preventDefault(); addChoiceFromInput(); }
+    });
+
+    modal.querySelector("#f-unit-wrap").innerHTML = UISelect.render("f-unit", ["pc","order","combo","set","cup","bottle","pack","kg","g","L","ml","box"], initial?.unit || "pc");
     UISelect.bind("f-unit", () => { if(!isEdit) saveDraft(); });
 
     const dualCheck = modal.querySelector("#f-has-dual");
@@ -410,10 +545,35 @@ const Inventory = (() => {
     }
   }
 
-  // (2026-07-13) Support onSavedCallback in saveProduct; was closing all modals
+  // (2026-07-13) Support custom category and choices in saveProduct; was static fields
   function saveProduct(product, modal, onSavedCallback){
     const name = modal.querySelector("#f-name").value.trim();
     if(!name){ Utils.toast("Product name is required.", "error"); return; }
+    let selectedCat = (UISelect.getValue("f-category") || "").trim().toUpperCase();
+    const typedNewCat = (modal.querySelector("#f-new-category-input")?.value || "").trim().toUpperCase();
+    if(typedNewCat && typedNewCat !== "ALL"){
+      selectedCat = typedNewCat;
+    }
+    if(!selectedCat || selectedCat === "+ ADD CUSTOM CATEGORY..."){
+      selectedCat = "BURGERS";
+    }
+    const allCats = DB.getCategories().map(c => String(c || "").trim().toUpperCase()).filter(Boolean);
+    if(!allCats.includes(selectedCat)){
+      allCats.push(selectedCat);
+      DB.setCategories(allCats);
+    }
+
+    const choicesArr = Array.isArray(modal._productChoices) ? [...modal._productChoices] : [];
+    const pendingChoice = (modal.querySelector("#f-new-choice-input")?.value || "").trim();
+    if(pendingChoice){
+      pendingChoice.split(",").map(s => s.trim()).filter(Boolean).forEach(part => {
+        if(!choicesArr.some(x => x.toLowerCase() === part.toLowerCase())) choicesArr.push(part);
+      });
+    }
+    if(choicesArr.length && (selectedCat.includes("DRINK") || /drink|juice|tea|lemonade|soda|softdrink/i.test(name))){
+      try { localStorage.setItem("bj_drink_choices", JSON.stringify(choicesArr)); } catch(e){}
+    }
+
     const hasDual = modal.querySelector("#f-has-dual")?.checked;
     const piecesPerPack = hasDual ? Math.max(2, Number(modal.querySelector("#f-pack-size")?.value)||10) : 1;
     const price = Number(modal.querySelector("#f-price").value)||0;
@@ -424,7 +584,8 @@ const Inventory = (() => {
       brand: modal.querySelector("#f-brand").value.trim(),
       distributor: modal.querySelector("#f-distributor").value.trim(),
       barcode: modal.querySelector("#f-barcode").value.trim(),
-      category: UISelect.getValue("f-category"),
+      category: selectedCat,
+      choices: choicesArr,
       cost,
       price,
       stock: Number(modal.querySelector("#f-stock").value)||0,
@@ -600,8 +761,9 @@ const Inventory = (() => {
     const body = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 0;">
         <div style="background:var(--paper-dim);padding:16px;border-radius:14px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;width:100%;max-height:380px;min-height:220px;overflow:hidden;box-sizing:border-box;">
+          <!-- (2026-07-13) Resolve bare asset filenames in preview modal; was raw url -->
           ${p.imageUrl ? `
-            <img src="${Utils.escapeHtml(p.imageUrl)}" alt="${Utils.escapeHtml(p.name)}" style="max-height:340px;max-width:100%;object-fit:contain;border-radius:8px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <img src="${Utils.escapeHtml(!/^(https?:|data:|blob:|\/|\.\/|assets\/)/i.test(String(p.imageUrl).trim()) ? 'assets/' + String(p.imageUrl).trim() : p.imageUrl)}" alt="${Utils.escapeHtml(p.name)}" style="max-height:340px;max-width:100%;object-fit:contain;border-radius:8px;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
             <div style="display:none;flex-direction:column;align-items:center;padding:30px;color:var(--ink-faint);">
               ${Icons.get(DB.categoryIcon(p.category),{size:52})}
               <p style="margin-top:10px;font-weight:700;font-size:.95rem;">Image could not be loaded</p>

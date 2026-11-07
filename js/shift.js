@@ -406,7 +406,8 @@ const Shift = (() => {
     win.innerHTML = `
       <div class="receipt">
         <div class="center">
-          <strong>${Utils.escapeHtml(settings.businessName || "Route 98")}</strong><br>
+          <!-- (2026-07-13) Fallback shift report businessName to BurgerJay; was Route 98 -->
+          <strong>${Utils.escapeHtml(settings.businessName || "BurgerJay")}</strong><br>
           ${Utils.escapeHtml(settings.address || "Cabangcalan, Dakit, Bogo City, Cebu")}<br>
           ${settings.tin ? `TIN: ${Utils.escapeHtml(settings.tin)}<br>` : ""}
           <strong style="display:inline-block;margin-top:3px;font-size:1.05em;">*** SHIFT SUMMARY REPORT ***</strong>

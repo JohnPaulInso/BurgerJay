@@ -11,6 +11,6 @@ rem (2026-07-13) Clean gradle assemble to ensure stale assets are deleted. Prev:
 call gradlew.bat clean assembleDebug
 cd ..
 echo Build complete.
-rem (2026-07-13) Select route98.apk in Explorer. Prev: com.faiora.app.apk
-explorer.exe /select,"%~dp0android\app\build\outputs\apk\debug\route98.apk"
+rem (2026-07-13) Select burgerjay.apk in Explorer; was route98.apk
+explorer.exe /select,"%~dp0android\app\build\outputs\apk\debug\burgerjay.apk"
 
